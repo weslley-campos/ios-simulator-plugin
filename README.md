@@ -21,10 +21,12 @@ plugin/     Gradle build of the Android Studio plugin, which bundles the helper 
   protocol/    the same socket protocol, read and written over a JDK Unix socket channel
   simulators/  the device list, boot, paste and screenshots through `xcrun simctl`, and
                the orientation through `xcrun devicectl`
-  helper/      HelperSession, which starts one helper, decodes its frames and sends input
+  helper/      HelperSession, which starts one helper, decodes its frames and sends input,
+               and the policy for starting a new helper when one stops
   screen/      placing the screen and its device frame, zoom levels, turning the screen
                with the simulator and turning clicks into screen fractions
   keyboard/    the Mac keyboard as HID usages on the simulator's US layout
+  settings/    the stream's frame rate and JPEG quality, from Advanced Settings
   shutdown/    asking to shut down the simulators the panel booted as the project closes
   ui/          the tool window: device picker, toolbar, the live screen, zoom controls
 icons/      devicehub.svg, a 512 px icon in DeviceHub's style; the tool window's 20 px icon
@@ -54,7 +56,21 @@ Disk.
 
 The iOS Simulator tool window on the right lists the iOS simulators, newest runtime first,
 and opens the booted one it showed last, or the first booted one. Picking a shut-down
-simulator boots it. When the helper fails or exits, the panel says why and offers Retry.
+simulator boots it. The panel shows one of four states:
+
+- Busy, with a progress bar, while it lists the simulators, boots or shuts down one, or
+  attaches.
+- Live, showing the screen.
+- Waiting, when no simulator is booted or the one shown shut down, with a link that boots
+  it, or Open DeviceHub when there are none. It attaches as soon as that simulator boots,
+  or another one does; one that was already booted doesn't take its place.
+- Failed, saying why, with Retry and Open DeviceHub.
+
+When the helper stops, or doesn't attach within 5 seconds, the panel starts a new one up to
+three times, after 1, 2 and 4 seconds, then fails. A screen that hasn't drawn yet, as on a
+simulator that just booted, gets 19 tries a second apart. A session that stayed live for 10
+seconds starts the count over. Errors a new helper would hit again, such as a missing
+device, fail at once.
 
 - Clicks and drags on the screen become taps and swipes; the trackpad or wheel scrolls what
   lies under the pointer, as a finger dragging it.
@@ -62,8 +78,8 @@ simulator boots it. When the helper fails or exits, the panel says why and offer
 - Beside the picker are Refresh and Shut Down. The controls below have Power, Volume Up and
   Down, Rotate Left and Right, Home, App Switcher, Take Screenshot, Paste and the Show
   Device Frame toggle. Rotating turns the simulator through `xcrun devicectl`, and the
-  screen and its frame turn with it. The panel reads the orientation when it attaches, so a
-  turn made in Simulator.app shows only after the panel reattaches.
+  screen and its frame turn with it. While it's shown, the panel reads the orientation
+  every 3 seconds, so a turn made in DeviceHub shows within 3 seconds.
 - While the screen has focus, the Mac keyboard types on the simulator's US layout,
   including Option characters and accents through their dead keys. Characters the layout
   has no keys for are pasted. ⌘V pastes the Mac's clipboard, and ⌘A, ⌘C, ⌘X and ⌘Z edit text
@@ -73,6 +89,10 @@ simulator boots it. When the helper fails or exits, the panel says why and offer
   chevron folds it to the percentage. Past Fit the screen scrolls in the panel.
 - Closing a project asks whether to shut down the simulators its panel opened that are
   still booted; Advanced Settings can make it always shut them down or keep them running.
+- Advanced Settings, under iOS Simulator, also sets the stream's frame rate, up to 30 a
+  second by default, and its JPEG quality, 70% by default. A change applies to the open
+  screen at once. An internal IDE (`-Didea.is.internal=true`) shows the frame rate at the
+  screen's top left.
 
 `SIMPANEL_UDID=<udid> ./gradlew test` also runs the live test, which relaunches Settings on
 that simulator, swipes it through a real helper and expects 25 decoded frames a second. It
@@ -120,17 +140,20 @@ Frames are JPEG; everything else is JSON.
 | 18 `scroll` | plugin to helper | `x`, `y`, `dx`, `dy` as screen fractions; the helper drags a finger by them |
 | 19 `key` | plugin to helper | `usage`, a HID keyboard usage, and `down` |
 | 21 `button` | plugin to helper | `button` (`home`, `power`, `volume-up`, `volume-down`, `action`, `siri`) and `down` |
+| 22 `settings` | plugin to helper | `maxFps`, 1 to 60, and `jpegQuality`, 0.1 to 1; the helper clamps both |
 
 Error codes: `device_not_found`, `device_not_booted`, `framebuffer_unavailable`,
-`hid_unavailable`, `xcode_not_found`, `unsupported_xcode` and `internal`. Types 3, 20 and 22
-(`display`, `text`, `settings`) are reserved and ignored today.
+`hid_unavailable`, `xcode_not_found`, `unsupported_xcode` and `internal`. The helper also
+sends `device_not_booted` when the simulator shuts down while it streams. Types 3 and 20
+(`display`, `text`) are reserved and ignored today.
 
 The framebuffer stays portrait when the simulator turns, so touches and scrolls are always
 fractions of the portrait screen and the viewport is its upright size; the plugin turns the
 frames for display and turns clicks back.
 
-The helper polls the framebuffer 30 times a second and sends a frame only when the surface
-or its seed changed. Through the socket, at a 400 x 870 viewport in a release build:
+The helper polls the framebuffer at `maxFps`, 30 times a second by default, and sends a
+frame only when the surface or its seed changed. Through the socket, at a 400 x 870
+viewport in a release build:
 
 | Check | Result |
 |---|---|
