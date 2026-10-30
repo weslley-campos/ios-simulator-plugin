@@ -3,7 +3,8 @@
 //
 // simpanel-client --socket <path> --out <dir> [--viewport 400x870] [--seconds 3] [--tap x,y]
 //                 [--swipe x1,y1,x2,y2] [--button home|power|volume-up|volume-down|action|siri]
-//                 [--presses 1] [--gap 0]
+//                 [--presses 1] [--gap 0] [--scroll x,y,dx,dy] [--scrolls 1]
+//                 [--keep]
 
 import Foundation
 import SimPanelKit
@@ -47,6 +48,7 @@ let button = option("--button").map { name -> DeviceButton in
     guard let button = DeviceButton(rawValue: name) else { fail("unknown button \(name)") }
     return button
 }
+let scroll = numbers(option("--scroll"), separator: ",")
 let swipeStart = 0.5
 let swipeDuration = 0.4
 try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
@@ -84,6 +86,7 @@ var decoder = FrameDecoder()
 
 func elapsed() -> Double { Date().timeIntervalSince(start) }
 
+let keep = CommandLine.arguments.contains("--keep")
 let presses = Int(option("--presses") ?? "1") ?? 1
 let gap = useconds_t((Double(option("--gap") ?? "0") ?? 0) * 1000)
 
@@ -105,11 +108,23 @@ func sendTap(_ point: [Double]) throws {
     print("tapped at \(point[0]), \(point[1])")
 }
 
-let acts = tap.count == 2 || button != nil
+/// Writes `--scrolls` scrolls a frame apart, each by the whole of `--scroll`'s distance.
+func sendScrolls(_ values: [Double]) throws {
+    let count = Int(option("--scrolls") ?? "1") ?? 1
+    for _ in 0..<count {
+        let scroll = Scroll(x: values[0], y: values[1], dx: values[2], dy: values[3])
+        try connection.write(PluginMessage.scroll(scroll).encoded())
+        usleep(16_000)
+    }
+    print("scrolled \(count) times by \(values[2]), \(values[3])")
+}
+
+let acts = tap.count == 2 || button != nil || scroll.count == 4
 while elapsed() < seconds + (acts ? 1 : 0) {
     if !tapped, acts, elapsed() >= seconds {
         if tap.count == 2 { try sendTap(tap) }
         if let button { try press(button) }
+        if scroll.count == 4 { try sendScrolls(scroll) }
         tapped = true
     }
     while let next = touches.first, next.at <= elapsed() {
@@ -131,6 +146,10 @@ while elapsed() < seconds + (acts ? 1 : 0) {
             if elapsed() >= swipeStart { swipeFrameTimes.append(elapsed()) }
             bytes += jpeg.count
             try jpeg.write(to: out.appendingPathComponent(tapped ? "after-tap.jpg" : "latest.jpg"))
+            if keep {
+                let name = String(format: "frame-%03d-%.2fs.jpg", frames, elapsed())
+                try jpeg.write(to: out.appendingPathComponent(name))
+            }
         case .error(let error):
             fail("\(error.code.rawValue): \(error.message)")
         case .chrome(let chrome):

@@ -109,6 +109,7 @@ class SimulatorPanel(private val project: Project) :
         }
         setContent(screen)
         screen.onTouch = { session?.send(it) }
+        screen.onScroll = { session?.send(it) }
         screen.onViewport = { session?.send(it) }
         screen.onButton = { session?.send(it) }
         screen.frameVisible = PropertiesComponent.getInstance().getBoolean(FrameVisibleKey, true)

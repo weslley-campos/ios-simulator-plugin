@@ -25,6 +25,7 @@ import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import java.awt.event.MouseWheelEvent
 import java.awt.image.BufferedImage
 import javax.swing.JComponent
 import javax.swing.SwingUtilities
@@ -32,12 +33,16 @@ import kotlin.math.roundToInt
 
 private const val ScreenInset = 8
 
+/** Points one wheel unit scrolls; macOS sends a unit for every ten points a trackpad moves. */
+private const val WheelUnit = 10.0
+
 /**
  * Paints the simulator's latest frame, fitted to the panel and dressed in the device when the helper
- * sent one, and turns the mouse into touches and button presses.
+ * sent one, and turns the mouse into touches, scrolls and button presses.
  */
 class ScreenView : JComponent() {
     var onTouch: (PluginMessage.Touch) -> Unit = {}
+    var onScroll: (PluginMessage.Scroll) -> Unit = {}
     var onViewport: (PluginMessage.Viewport) -> Unit = {}
     var onButton: (PluginMessage.Button) -> Unit = {}
 
@@ -116,6 +121,7 @@ class ScreenView : JComponent() {
         }
         addMouseListener(mouse)
         addMouseMotionListener(mouse)
+        addMouseWheelListener(::scroll)
     }
 
     /** Starts a new session's screen, bare until [showDeviceFrame] dresses it. */
@@ -199,6 +205,20 @@ class ScreenView : JComponent() {
     private fun touch(phase: TouchPhase, screen: Rectangle, point: Point) {
         val fraction = fractionOn(screen, point)
         onTouch(PluginMessage.Touch(phase, fraction.x, fraction.y))
+    }
+
+    /** Scrolls what lies under the pointer; macOS sends a sideways scroll with Shift held. */
+    private fun scroll(e: MouseWheelEvent) {
+        val screen = screen()?.takeIf { image != null && !touching && it.contains(e.point) } ?: return
+        val point = fractionOn(screen, e.point)
+        val distance = e.preciseWheelRotation * WheelUnit
+        onScroll(
+            if (e.isShiftDown) {
+                PluginMessage.Scroll(point.x, point.y, dx = distance / screen.width, dy = 0.0)
+            } else {
+                PluginMessage.Scroll(point.x, point.y, dx = 0.0, dy = distance / screen.height)
+            },
+        )
     }
 
     private fun Graphics2D.drawButtons(placed: PlacedFrame, onTop: Boolean) {

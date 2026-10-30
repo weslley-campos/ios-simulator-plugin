@@ -8,6 +8,7 @@ import java.awt.Color
 import java.awt.Dimension
 import java.awt.event.InputEvent
 import java.awt.event.MouseEvent
+import java.awt.event.MouseWheelEvent
 import java.awt.image.BufferedImage
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -79,6 +80,48 @@ class ScreenViewTest {
         assertEquals(0.5, touches[0].y, 0.01)
         assertEquals(0.22, touches[1].y, 0.01)
         assertEquals(0.0, touches[2].y)
+    }
+
+    private fun ScreenView.wheel(x: Int, y: Int, rotation: Double, shift: Boolean = false) {
+        val modifiers = if (shift) InputEvent.SHIFT_DOWN_MASK else 0
+        dispatchEvent(
+            MouseWheelEvent(
+                this, MouseEvent.MOUSE_WHEEL, 0, modifiers, x, y, x, y, 0, false,
+                MouseWheelEvent.WHEEL_UNIT_SCROLL, 1, rotation.toInt(), rotation,
+            ),
+        )
+    }
+
+    @Test
+    fun scrollsWhatLiesUnderThePointerByTheWheelsDistance() {
+        val view = view()
+        val scrolls = mutableListOf<PluginMessage.Scroll>()
+        view.onScroll = { scrolls += it }
+        view.show(frame(Color.RED))
+
+        view.wheel(250, 450, rotation = 2.5)
+        view.wheel(250, 450, rotation = -1.0, shift = true)
+
+        assertEquals(0.5, scrolls[0].x, 0.01)
+        assertEquals(0.5, scrolls[0].y, 0.01)
+        assertEquals(0.0, scrolls[0].dx)
+        assertEquals(25.0 / 884, scrolls[0].dy, 0.001)
+        assertEquals(-10.0 / 407, scrolls[1].dx, 0.001)
+        assertEquals(0.0, scrolls[1].dy)
+    }
+
+    @Test
+    fun scrollsNeitherOutsideTheScreenNorDuringATouch() {
+        val view = view()
+        val scrolls = mutableListOf<PluginMessage.Scroll>()
+        view.onScroll = { scrolls += it }
+        view.show(frame(Color.RED))
+
+        view.wheel(20, 450, rotation = 1.0)
+        view.mouse(MouseEvent.MOUSE_PRESSED, 250, 450)
+        view.wheel(250, 450, rotation = 1.0)
+
+        assertEquals(emptyList(), scrolls)
     }
 
     @Test

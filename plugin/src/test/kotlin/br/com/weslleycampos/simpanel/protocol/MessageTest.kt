@@ -71,6 +71,14 @@ class MessageTest {
     }
 
     @Test
+    fun writesTheScrollTheHelperReads() {
+        val scroll = PluginMessage.Scroll(0.5, 0.25, dx = 0.0, dy = -0.125)
+
+        assertEquals(MessageType.Scroll.code, scroll.encoded()[4])
+        assertEquals("""{"x":0.5,"y":0.25,"dx":0.0,"dy":-0.125}""", json(scroll))
+    }
+
+    @Test
     fun writesTheButtonTheHelperReads() {
         val press = PluginMessage.Button(DeviceButton.VolumeUp, down = true)
 

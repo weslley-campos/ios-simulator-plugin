@@ -80,6 +80,15 @@ struct MessageTests {
         #expect(message == .touch(Touch(phase: .down, x: 0.5, y: 0.125)))
     }
 
+    @Test func decodesAScrollAsThePluginWritesIt() throws {
+        let payload = Data(#"{"x":0.5,"y":0.25,"dx":0,"dy":-0.125}"#.utf8)
+
+        let message = try PluginMessage.decode(type: MessageType.scroll.rawValue, payload: payload)
+
+        #expect(message == .scroll(Scroll(x: 0.5, y: 0.25, dx: 0, dy: -0.125)))
+        #expect(try decodePlugin(message!) == message)
+    }
+
     @Test func decodesAButtonAsThePluginWritesIt() throws {
         let payload = Data(#"{"button":"volume-up","down":true}"#.utf8)
 

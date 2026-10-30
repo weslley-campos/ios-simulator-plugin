@@ -102,22 +102,17 @@ let streamer = FrameStreamer(
     finish(0)
 }
 streamer.start()
-
-func clamp(_ value: Double) -> Double {
-    min(1, max(0, value))
-}
+let scroller = Scroller(simulator: simulator)
 
 func handle(_ message: PluginMessage) {
     switch message {
     case .viewport(let viewport):
         streamer.setViewport(viewport)
     case .touch(let touch):
-        let phase: SPTouchPhase = switch touch.phase {
-        case .down: .down
-        case .move: .move
-        case .up: .up
-        }
-        simulator.touch(phase, x: clamp(touch.x), y: clamp(touch.y))
+        if touch.phase == .down { scroller.interrupt() }
+        touch.send(to: simulator)
+    case .scroll(let scroll):
+        scroller.scroll(scroll)
     case .button(let press):
         press.button.send(down: press.down, to: simulator)
     }

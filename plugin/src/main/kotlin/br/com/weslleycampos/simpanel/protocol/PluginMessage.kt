@@ -21,6 +21,16 @@ sealed interface PluginMessage {
             Framing.encode(MessageType.Touch, SimPanelJson.encodeToString(this).encodeToByteArray())
     }
 
+    /**
+     * Scrolls the content under a point by a distance, both given as fractions of the screen; a positive
+     * [dy] brings up what lies further down.
+     */
+    @Serializable
+    data class Scroll(val x: Double, val y: Double, val dx: Double, val dy: Double) : PluginMessage {
+        override fun encoded() =
+            Framing.encode(MessageType.Scroll, SimPanelJson.encodeToString(this).encodeToByteArray())
+    }
+
     /** A hardware button going down or up. */
     @Serializable
     data class Button(val button: DeviceButton, val down: Boolean) : PluginMessage {

@@ -30,6 +30,22 @@ public struct Touch: Codable, Equatable, Sendable {
     }
 }
 
+/// Scrolls the content under a point by a distance, both given as fractions of the screen;
+/// a positive `dy` brings up what lies further down.
+public struct Scroll: Codable, Equatable, Sendable {
+    public let x: Double
+    public let y: Double
+    public let dx: Double
+    public let dy: Double
+
+    public init(x: Double, y: Double, dx: Double, dy: Double) {
+        self.x = x
+        self.y = y
+        self.dx = dx
+        self.dy = dy
+    }
+}
+
 /// A hardware button going down or up, named as the device chrome names it.
 public struct ButtonPress: Codable, Equatable, Sendable {
     public let button: DeviceButton
@@ -54,6 +70,7 @@ public enum DeviceButton: String, Codable, Sendable {
 public enum PluginMessage: Equatable, Sendable {
     case viewport(Viewport)
     case touch(Touch)
+    case scroll(Scroll)
     case button(ButtonPress)
 
     public func encoded() throws -> Data {
@@ -65,6 +82,8 @@ public enum PluginMessage: Equatable, Sendable {
             )
         case .touch(let touch):
             Framing.encode(type: MessageType.touch.rawValue, payload: try JSONEncoder().encode(touch))
+        case .scroll(let scroll):
+            Framing.encode(type: MessageType.scroll.rawValue, payload: try JSONEncoder().encode(scroll))
         case .button(let press):
             Framing.encode(type: MessageType.button.rawValue, payload: try JSONEncoder().encode(press))
         }
@@ -75,6 +94,7 @@ public enum PluginMessage: Equatable, Sendable {
         switch MessageType(rawValue: type) {
         case .viewport: .viewport(try JSONDecoder().decode(Viewport.self, from: payload))
         case .touch: .touch(try JSONDecoder().decode(Touch.self, from: payload))
+        case .scroll: .scroll(try JSONDecoder().decode(Scroll.self, from: payload))
         case .button: .button(try JSONDecoder().decode(ButtonPress.self, from: payload))
         default: nil
         }
