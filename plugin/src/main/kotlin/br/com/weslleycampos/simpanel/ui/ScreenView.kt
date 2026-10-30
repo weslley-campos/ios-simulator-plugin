@@ -91,15 +91,20 @@ class ScreenView : JComponent() {
         repaint()
     }
 
-    /** Replaces the screen with [text], an optional grey [detail] line and an optional Retry link. */
-    fun showStatus(text: String, detail: String? = null, retry: (() -> Unit)? = null) {
+    /** Replaces the screen with [text], an optional grey [detail] line and an optional [action] link. */
+    fun showStatus(
+        text: String,
+        detail: String? = null,
+        actionText: String = message("status.retry"),
+        action: (() -> Unit)? = null,
+    ) {
         image = null
         touching = false
         status.clear()
         status.appendText(text)
         detail?.let { status.appendLine(it, SimpleTextAttributes.GRAYED_ATTRIBUTES, null) }
-        retry?.let { action ->
-            status.appendLine(message("status.retry"), SimpleTextAttributes.LINK_PLAIN_ATTRIBUTES) { action() }
+        action?.let { run ->
+            status.appendLine(actionText, SimpleTextAttributes.LINK_PLAIN_ATTRIBUTES) { run() }
         }
         repaint()
     }

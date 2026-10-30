@@ -60,7 +60,8 @@ private val ScreenshotDirectory = Path.of(System.getProperty("user.home"), "Desk
  */
 class SimulatorPanel(private val project: Project) :
     SimpleToolWindowPanel(true, true), Disposable, SimulatorControls {
-    private val scope = project.service<SimPanelService>().scope.childScope(
+    private val service = project.service<SimPanelService>()
+    private val scope = service.scope.childScope(
         name = "iOS Simulator panel",
         context = Dispatchers.EDT + ModalityState.any().asContextElement(),
     )
@@ -86,8 +87,9 @@ class SimulatorPanel(private val project: Project) :
                 refresh()
             }
         }
+        val shutDown = ControlAction(message("action.shutDown"), AllIcons.Actions.Suspend, this) { shutDown() }
         val actions = ActionManager.getInstance()
-            .createActionToolbar(ToolbarPlace, DefaultActionGroup(refresh), true)
+            .createActionToolbar(ToolbarPlace, DefaultActionGroup(refresh, shutDown), true)
         actions.targetComponent = this
         val controls = ActionManager.getInstance()
             .createActionToolbar(ControlsPlace, controlActions(), true)
@@ -153,6 +155,29 @@ class SimulatorPanel(private val project: Project) :
         }
     }
 
+    override fun shutDown() {
+        val simulator = openSimulator ?: return
+        sessionJob?.cancel()
+        sessionJob = scope.launch {
+            screen.showStatus(message("status.shuttingDown", simulator.name))
+            try {
+                withContext(Dispatchers.IO) { Simctl.shutdown(simulator.udid) }
+                service.opened.remove(simulator.udid)
+                screen.showStatus(
+                    message("status.shutDown", simulator.name),
+                    actionText = message("status.boot"),
+                    action = { open(simulator.copy(booted = false)) },
+                )
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.warn(e)
+                val failed = message("status.shutDownFailed", simulator.name)
+                screen.showStatus(failed, e.message, action = { open(simulator) })
+            }
+            refresh(openSelected = false)
+        }
+    }
+
     private fun controlActions() = DefaultActionGroup(
         ControlAction(message("action.power"), ControlIcons.Power, this) { press(DeviceButton.Power) },
         ControlAction(message("action.volumeUp"), ControlIcons.VolumeUp, this) { press(DeviceButton.VolumeUp) },
@@ -167,20 +192,21 @@ class SimulatorPanel(private val project: Project) :
         ControlAction(message("action.paste"), AllIcons.Actions.MenuPaste, this) { paste() },
     )
 
-    private fun refresh() {
+    private fun refresh(openSelected: Boolean = true) {
         scope.launch {
             val simulators = try {
                 withContext(Dispatchers.IO) { Simctl.list() }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Log.warn(e)
-                screen.showStatus(message("status.listFailed"), e.message, retry = ::refresh)
+                screen.showStatus(message("status.listFailed"), e.message, action = ::refresh)
                 return@launch
             }
             val keep = (devices.selectedItem as? Simulator)?.udid
                 ?: PropertiesComponent.getInstance().getValue(LastUdidKey)
             val selected = simulators.firstOrNull { it.udid == keep } ?: simulators.firstOrNull { it.booted }
             devices.model = CollectionComboBoxModel(simulators, selected)
+            if (!openSelected) return@launch
             when {
                 simulators.isEmpty() -> screen.showStatus(message("status.noSimulators"))
                 selected == null -> screen.showStatus(message("status.pick"))
@@ -193,6 +219,7 @@ class SimulatorPanel(private val project: Project) :
         if (simulator.udid == openSimulator?.udid && sessionJob?.isActive == true) return
         sessionJob?.cancel()
         openSimulator = simulator
+        service.opened[simulator.udid] = simulator
         PropertiesComponent.getInstance().setValue(LastUdidKey, simulator.udid)
         sessionJob = scope.launch {
             try {
@@ -200,7 +227,7 @@ class SimulatorPanel(private val project: Project) :
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Log.warn(e)
-                screen.showStatus(message("status.failed", simulator.name), e.message, retry = { open(simulator) })
+                screen.showStatus(message("status.failed", simulator.name), e.message, action = { open(simulator) })
             }
         }
     }
@@ -239,8 +266,8 @@ class SimulatorPanel(private val project: Project) :
         }
         val retry = { open(simulator) }
         when (val reason = failure) {
-            null -> screen.showStatus(message("status.stopped", simulator.name), retry = retry)
-            else -> screen.showStatus(reason.errorCode.text(), reason.message, retry = retry)
+            null -> screen.showStatus(message("status.stopped", simulator.name), action = retry)
+            else -> screen.showStatus(reason.errorCode.text(), reason.message, action = retry)
         }
     }
 }

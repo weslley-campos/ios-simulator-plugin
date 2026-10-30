@@ -15,5 +15,8 @@
         <toolWindow id="iOS Simulator" anchor="right" os="mac" icon="/icons/toolWindow.svg"
                     factoryClass="br.com.weslleycampos.simpanel.ui.SimulatorToolWindowFactory"/>
         <notificationGroup id="iOS Simulator" displayType="BALLOON" key="notification.group"/>
+        <projectCloseHandler implementation="br.com.weslleycampos.simpanel.shutdown.ShutDownOnClose"/>
+        <advancedSetting id="simpanel.shutDownOnClose" default="Ask" groupKey="advanced.settings.group"
+                         enumClass="br.com.weslleycampos.simpanel.shutdown.ShutDownChoice"/>
     </extensions>
 </idea-plugin>

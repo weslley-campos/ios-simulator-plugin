@@ -15,4 +15,7 @@ interface SimulatorControls {
 
     /** Hands the Mac clipboard's text to the simulator's pasteboard. */
     fun paste()
+
+    /** Shuts the simulator down, leaving a Boot link in its place. */
+    fun shutDown()
 }

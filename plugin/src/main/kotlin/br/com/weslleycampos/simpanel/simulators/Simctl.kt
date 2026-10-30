@@ -11,6 +11,7 @@ private val ListTimeout = 30.seconds
 private val BootTimeout = 3.minutes
 private val ScreenshotTimeout = 10.seconds
 private val PasteTimeout = 10.seconds
+private val ShutdownTimeout = 1.minutes
 
 /** Blocking calls to `xcrun simctl`; run them off the EDT. */
 object Simctl {
@@ -19,6 +20,16 @@ object Simctl {
     /** Boots the simulator if it isn't, and returns once it has finished booting. */
     fun boot(udid: String) {
         run(BootTimeout, "bootstatus", udid, "-b")
+    }
+
+    /** Shuts the simulator down and returns once it has. */
+    fun shutdown(udid: String) {
+        run(ShutdownTimeout, "shutdown", udid)
+    }
+
+    /** Asks CoreSimulator to shut the simulator down without waiting, so it carries on after the IDE quits. */
+    fun startShutdown(udid: String) {
+        GeneralCommandLine("xcrun", "simctl", "shutdown", udid).createProcess()
     }
 
     /** Saves the main display as a PNG at [file]. */
