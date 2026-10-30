@@ -18,7 +18,7 @@
         <projectCloseHandler implementation="br.com.weslleycampos.simpanel.shutdown.ShutDownOnClose"/>
         <advancedSetting id="simpanel.shutDownOnClose" default="Ask" groupKey="advanced.settings.group"
                          enumClass="br.com.weslleycampos.simpanel.shutdown.ShutDownChoice"/>
-        <advancedSetting id="simpanel.maxFps" default="30" groupKey="advanced.settings.group"/>
+        <advancedSetting id="simpanel.maxFps" default="60" groupKey="advanced.settings.group"/>
         <advancedSetting id="simpanel.jpegQuality" default="70" groupKey="advanced.settings.group"/>
     </extensions>
 </idea-plugin>

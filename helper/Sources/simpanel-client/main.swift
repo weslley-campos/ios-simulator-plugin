@@ -4,7 +4,7 @@
 // simpanel-client --socket <path> --out <dir> [--viewport 400x870] [--seconds 3] [--tap x,y]
 //                 [--swipe x1,y1,x2,y2] [--button home|power|volume-up|volume-down|action|siri]
 //                 [--presses 1] [--gap 0] [--scroll x,y,dx,dy] [--scrolls 1]
-//                 [--keys S11,A8,C25] [--keep]
+//                 [--keys S11,A8,C25] [--keep] [--fps 30] [--quality 0.7]
 
 import Foundation
 import SimPanelKit
@@ -63,6 +63,14 @@ do {
 if viewport.count == 2 {
     let message = PluginMessage.viewport(Viewport(width: Int(viewport[0]), height: Int(viewport[1])))
     try connection.write(message.encoded())
+}
+if option("--fps") != nil || option("--quality") != nil {
+    let standard = StreamSettings.standard
+    let settings = StreamSettings(
+        maxFps: option("--fps").flatMap { Int($0) } ?? standard.maxFps,
+        jpegQuality: option("--quality").flatMap { Double($0) } ?? standard.jpegQuality
+    )
+    try connection.write(PluginMessage.settings(settings).encoded())
 }
 
 let start = Date()

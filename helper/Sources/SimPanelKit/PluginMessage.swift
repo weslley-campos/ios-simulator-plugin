@@ -79,7 +79,7 @@ public enum DeviceButton: String, Codable, Sendable {
 
 /// How often the helper sends a frame, at most, and the JPEG quality it encodes them at, from 0 to 1.
 public struct StreamSettings: Codable, Equatable, Sendable {
-    public static let standard = StreamSettings(maxFps: 30, jpegQuality: 0.7)
+    public static let standard = StreamSettings(maxFps: 60, jpegQuality: 0.7)
 
     public let maxFps: Int
     public let jpegQuality: Double

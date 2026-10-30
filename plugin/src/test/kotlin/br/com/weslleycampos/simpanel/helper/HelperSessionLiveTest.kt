@@ -81,6 +81,31 @@ class HelperSessionLiveTest {
         assertTrue(fps <= 6, "the helper sends no more frames than maxFps allows")
     }
 
+    @Test
+    fun decodesSixtyFramesASecondAtMaxFps60(): Unit = runBlocking {
+        openSettings()
+        val session = HelperSession(helper, udid)
+        val start = System.nanoTime()
+        val frames = mutableListOf<Double>()
+        session.send(PluginMessage.Viewport(686, 1491))
+        session.send(PluginMessage.Settings(maxFps = 60, jpegQuality = 0.7))
+        val running = launch {
+            session.run { if (it is HelperEvent.FrameReady) frames += (System.nanoTime() - start) / 1e9 }
+        }
+
+        delay(1.seconds)
+        val swipeStart = (System.nanoTime() - start) / 1e9
+        session.swipe()
+        delay(1500.milliseconds)
+        running.cancelAndJoin()
+
+        val scrolling = frames.filter { it >= swipeStart }
+        assertTrue(scrolling.size >= 2, "the swipe scrolled the screen")
+        val fps = (scrolling.size - 1) / (scrolling.last() - scrolling.first())
+        println("%d frames, %.1f fps while scrolling at maxFps 60".format(scrolling.size, fps))
+        assertTrue(fps >= 50, "decoded frames keep up with a 60 fps stream")
+    }
+
     /** Swipes up across the middle of the screen in 24 moves, about one a frame. */
     private suspend fun HelperSession.swipe() {
         send(PluginMessage.Touch(TouchPhase.Down, 0.5, 0.75))

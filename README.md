@@ -89,17 +89,19 @@ device, fail at once.
   chevron folds it to the percentage. Past Fit the screen scrolls in the panel.
 - Closing a project asks whether to shut down the simulators its panel opened that are
   still booted; Advanced Settings can make it always shut them down or keep them running.
-- Advanced Settings, under iOS Simulator, also sets the stream's frame rate, up to 30 a
-  second by default, and its JPEG quality, 70% by default. A change applies to the open
-  screen at once.
+- Advanced Settings, under iOS Simulator, also sets the stream's frame rate, up to 60 a
+  second by default, which is as often as the simulator draws, and its JPEG quality, 70% by
+  default. A change applies to the open screen at once.
 - The gear after Shut Down opens the panel's settings menu. Its Show Frame Rate checkbox,
   off by default, paints how many frames arrived in the last second at the screen's top
   left.
 
-`SIMPANEL_UDID=<udid> ./gradlew test` also runs the live test, which relaunches Settings on
-that simulator, swipes it through a real helper and expects 25 decoded frames a second. It
-measured 30.4 fps at 400 x 870. Run it on a simulator no panel is showing: a second helper's
-touches don't land on a device another helper already drives.
+`SIMPANEL_UDID=<udid> ./gradlew test` also runs the live tests, which relaunch Settings on
+that simulator and swipe it through a real helper. They expect 25 decoded frames a second
+at 400 x 870 and 50 at 686 x 1491, and measured 58.5 fps and 53.8 to 59.9 fps. The first
+test of a run can miss its swipe while Settings relaunches, most often right after a boot;
+run them again. Run them on a simulator no panel is showing: a second helper's touches
+don't land on a device another helper already drives.
 
 ## Helper
 
@@ -124,7 +126,8 @@ To drive it without the plugin, run the client in a second terminal:
 It sends the viewport, swipes or taps (`--tap x,y`) in screen fractions, saves the latest
 frame to `frames/latest.jpg` and prints the frame rate across the scroll. `--scroll
 x,y,dx,dy` scrolls, `--button home` presses a button and `--keys` presses HID usages, each
-`S` (Shift) `A` (Option) or `C` (Command) prefixed, such as `S11,A8,C25`.
+`S` (Shift) `A` (Option) or `C` (Command) prefixed, such as `S11,A8,C25`. `--fps 60` and
+`--quality 0.5` send stream settings.
 
 ### Protocol
 
@@ -153,16 +156,19 @@ The framebuffer stays portrait when the simulator turns, so touches and scrolls 
 fractions of the portrait screen and the viewport is its upright size; the plugin turns the
 frames for display and turns clicks back.
 
-The helper polls the framebuffer at `maxFps`, 30 times a second by default, and sends a
+The helper polls the framebuffer at `maxFps`, 60 times a second by default, and sends a
 frame only when the surface or its seed changed. Through the socket, at a 400 x 870
 viewport in a release build:
 
 | Check | Result |
 |---|---|
-| Frame rate while scrolling | 30 a second, median gap 33 ms, worst 40 ms |
+| Frame rate while scrolling at `maxFps` 30 | 30 a second, median gap 33 ms, worst 40 ms |
 | Encode, Lanczos scale and JPEG at 0.7 | 8 to 9 ms a frame |
 | Socket write | 0.2 ms a frame, 52 KB average |
 | Idle | No frames sent while the screen doesn't change |
+| At `maxFps` 60, a page redrawing at 60 Hz | 57 to 61 a second at any viewport, 6 to 9 ms encode |
+| Helper CPU while the screen animates | 20% of a core at 30 a second, 30% at 60 |
+| Plugin JPEG decode | 3.4 ms at 686 x 1491, 11.3 ms at 1320 x 2868 |
 
 ## Spike
 
