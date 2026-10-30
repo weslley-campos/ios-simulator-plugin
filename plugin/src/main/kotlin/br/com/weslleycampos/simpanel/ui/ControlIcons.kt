@@ -10,6 +10,7 @@ object ControlIcons {
     val Home = icon("home")
     val AppSwitcher = icon("overview")
     val Screenshot = icon("screenshot")
+    val DeviceFrame = icon("device-frame")
 
     private fun icon(name: String) = IconLoader.getIcon("/icons/controls/$name.svg", ControlIcons::class.java)
 }

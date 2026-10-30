@@ -12,6 +12,7 @@ import br.com.weslleycampos.simpanel.simulators.Simctl
 import br.com.weslleycampos.simpanel.simulators.Simulator
 import br.com.weslleycampos.simpanel.simulators.screenshotFile
 import br.com.weslleycampos.simpanel.ui.actions.ControlAction
+import br.com.weslleycampos.simpanel.ui.actions.FrameToggleAction
 import br.com.weslleycampos.simpanel.ui.actions.SimulatorControls
 import com.intellij.icons.AllIcons
 import com.intellij.ide.util.PropertiesComponent
@@ -50,6 +51,7 @@ import javax.imageio.ImageIO
 import javax.swing.JPanel
 
 private const val LastUdidKey = "simpanel.lastUdid"
+private const val FrameVisibleKey = "simpanel.frameVisible"
 private const val ToolbarPlace = "SimPanelToolbar"
 private const val ControlsPlace = "SimPanelControls"
 private val Log = logger<SimulatorPanel>()
@@ -108,6 +110,8 @@ class SimulatorPanel(private val project: Project) :
         setContent(screen)
         screen.onTouch = { session?.send(it) }
         screen.onViewport = { session?.send(it) }
+        screen.onButton = { session?.send(it) }
+        screen.frameVisible = PropertiesComponent.getInstance().getBoolean(FrameVisibleKey, true)
         screen.showStatus(message("status.loading"))
         refresh()
     }
@@ -157,6 +161,13 @@ class SimulatorPanel(private val project: Project) :
         }
     }
 
+    override var frameVisible: Boolean
+        get() = screen.frameVisible
+        set(value) {
+            screen.frameVisible = value
+            PropertiesComponent.getInstance().setValue(FrameVisibleKey, value, true)
+        }
+
     override fun shutDown() {
         val simulator = openSimulator ?: return
         sessionJob?.cancel()
@@ -192,6 +203,8 @@ class SimulatorPanel(private val project: Project) :
         Separator.create(),
         ControlAction(message("action.screenshot"), ControlIcons.Screenshot, this) { takeScreenshot() },
         ControlAction(message("action.paste"), AllIcons.Actions.MenuPaste, this) { paste() },
+        Separator.create(),
+        FrameToggleAction(this),
     )
 
     private fun refresh(openSelected: Boolean = true) {
@@ -253,6 +266,7 @@ class SimulatorPanel(private val project: Project) :
                         screen.attach(Dimension(event.hello.width, event.hello.height))
                     }
                     is HelperEvent.FrameReady -> screen.show(event.image)
+                    is HelperEvent.DeviceFrameReady -> screen.showDeviceFrame(event.frame)
                     is HelperEvent.Failed -> failure = event.failure
                 }
             }

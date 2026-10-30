@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Testing
 @testable import SimPanelKit
@@ -34,6 +35,19 @@ struct MessageTests {
 
         #expect(Set(object.keys) == ["udid", "name", "width", "height", "orientation"])
         #expect(object["orientation"] as? String == "portrait")
+    }
+
+    @Test func chromeRoundTripsWithItsImages() throws {
+        let rect = ChromeRect(CGRect(x: 1, y: 180, width: 16, height: 34))
+        let button = ChromeButton(
+            button: .action, frame: rect, onTop: false, image: Data([1, 2]), pressedImage: Data([3])
+        )
+        let chrome = HelperMessage.chrome(Chrome(
+            width: 494, height: 992, scale: 3, screen: ChromeRect(CGRect(x: 27, y: 18, width: 440, height: 956)),
+            screenCornerRadius: 55, bezel: Data([0x89, 0x50, 0x4e, 0x47]), buttons: [button]
+        ))
+
+        #expect(try decodeHelper(chrome) == chrome)
     }
 
     @Test func frameCarriesTheJPEGBytesUnchanged() throws {

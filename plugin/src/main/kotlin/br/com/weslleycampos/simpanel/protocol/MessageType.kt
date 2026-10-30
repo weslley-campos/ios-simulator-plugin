@@ -5,6 +5,7 @@ enum class MessageType(val code: Byte) {
     Frame(2),
     Display(3),
     Error(4),
+    Chrome(5),
     Viewport(16),
     Touch(17),
     Scroll(18),

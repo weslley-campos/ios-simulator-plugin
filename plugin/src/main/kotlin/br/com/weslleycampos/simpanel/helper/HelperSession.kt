@@ -3,6 +3,7 @@ package br.com.weslleycampos.simpanel.helper
 import br.com.weslleycampos.simpanel.protocol.HelperMessage
 import br.com.weslleycampos.simpanel.protocol.MessageReader
 import br.com.weslleycampos.simpanel.protocol.PluginMessage
+import br.com.weslleycampos.simpanel.screen.DeviceFrame
 import com.intellij.openapi.diagnostic.logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -105,6 +106,11 @@ private fun MessageReader.nextEvent(decoder: JpegDecoder): HelperEvent? {
             is HelperMessage.Hello -> return HelperEvent.Attached(message)
             is HelperMessage.Frame -> return HelperEvent.FrameReady(decoder.decode(message.jpeg))
             is HelperMessage.Failure -> return HelperEvent.Failed(message)
+            is HelperMessage.Chrome -> try {
+                return HelperEvent.DeviceFrameReady(DeviceFrame.of(message))
+            } catch (e: IOException) {
+                Log.warn("Showing the screen without the device frame", e)
+            }
             null -> Unit
         }
     }

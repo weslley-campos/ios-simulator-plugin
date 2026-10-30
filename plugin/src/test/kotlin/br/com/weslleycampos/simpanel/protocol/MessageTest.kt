@@ -30,6 +30,22 @@ class MessageTest {
     }
 
     @Test
+    fun decodesTheChromeWithItsBase64Images() {
+        val payload = """{"width":494,"height":992,"scale":3,"screen":{"x":27,"y":18,"width":440,"height":956},""" +
+            """"screenCornerRadius":63.16,""" +
+            """"bezel":"iVBO\/w==","buttons":[{"button":"power","frame":{"x":477,"y":293,"width":16,"height":101},""" +
+            """"onTop":false,"image":"AQI=","pressedImage":"Aw=="}]}"""
+
+        val chrome = assertIs<HelperMessage.Chrome>(HelperMessage.decode(raw(MessageType.Chrome, payload)))
+
+        assertEquals(ChromeRect(27.0, 18.0, 440.0, 956.0), chrome.screen)
+        assertEquals(63.16, chrome.screenCornerRadius)
+        assertContentEquals(byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0xff.toByte()), chrome.bezel)
+        assertEquals(DeviceButton.Power, chrome.buttons.single().button)
+        assertContentEquals(byteArrayOf(1, 2), chrome.buttons.single().image)
+    }
+
+    @Test
     fun decodesAnErrorWithItsCode() {
         val failure = HelperMessage.decode(raw(MessageType.Error, """{"code":"device_not_booted","message":"B849"}"""))
 

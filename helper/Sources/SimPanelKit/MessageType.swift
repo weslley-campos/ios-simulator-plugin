@@ -4,6 +4,7 @@ public enum MessageType: UInt8, Sendable {
     case frame = 2
     case display = 3
     case error = 4
+    case chrome = 5
 
     case viewport = 16
     case touch = 17

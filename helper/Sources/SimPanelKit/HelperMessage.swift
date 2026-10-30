@@ -36,6 +36,7 @@ public enum HelperMessage: Equatable, Sendable {
     case hello(Hello)
     case frame(Data)
     case error(HelperError)
+    case chrome(Chrome)
 
     public func encoded() throws -> Data {
         switch self {
@@ -45,6 +46,8 @@ public enum HelperMessage: Equatable, Sendable {
             Framing.encode(type: MessageType.frame.rawValue, payload: jpeg)
         case .error(let error):
             Framing.encode(type: MessageType.error.rawValue, payload: try JSONEncoder().encode(error))
+        case .chrome(let chrome):
+            Framing.encode(type: MessageType.chrome.rawValue, payload: try JSONEncoder().encode(chrome))
         }
     }
 
@@ -54,6 +57,7 @@ public enum HelperMessage: Equatable, Sendable {
         case .hello: .hello(try JSONDecoder().decode(Hello.self, from: payload))
         case .frame: .frame(payload)
         case .error: .error(try JSONDecoder().decode(HelperError.self, from: payload))
+        case .chrome: .chrome(try JSONDecoder().decode(Chrome.self, from: payload))
         default: nil
         }
     }

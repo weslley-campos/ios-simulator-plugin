@@ -18,4 +18,7 @@ interface SimulatorControls {
 
     /** Shuts the simulator down, leaving a Boot link in its place. */
     fun shutDown()
+
+    /** Draws the device around the screen, as Simulator does. */
+    var frameVisible: Boolean
 }

@@ -39,6 +39,12 @@ typedef NS_ENUM(NSInteger, SPButton) {
 @property (nonatomic, readonly, copy) NSString *udid;
 @property (nonatomic, readonly, copy) NSString *name;
 
+/// The device type's bundle, which names the device chrome and holds the screen's mask.
+@property (nonatomic, readonly, copy, nullable) NSString *deviceTypePath;
+
+/// Pixels per point on the main screen.
+@property (nonatomic, readonly) double screenScale;
+
 /// The main display's current surface; it is replaced when the display changes size.
 @property (nonatomic, readonly, nullable) IOSurface *framebuffer;
 

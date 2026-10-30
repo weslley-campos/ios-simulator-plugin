@@ -76,6 +76,12 @@ typedef void *_Nullable (*IndigoArbitraryFn)(uint32_t target, uint32_t page, uin
 - (unsigned short)displayClass;
 @end
 
+@protocol SPDeviceType <NSObject>
+@optional
+- (NSString *)bundlePath;
+- (float)mainScreenScale;
+@end
+
 static NSError *SPMakeError(SPError code, NSString *message) {
     return [NSError errorWithDomain:SPErrorDomain
                                code:code
@@ -155,6 +161,13 @@ static NSError *SPMakeError(SPError code, NSString *message) {
         _simulatorKit = simulatorKit;
         _udid = [[device valueForKey:@"UDID"] UUIDString];
         _name = [[device valueForKey:@"name"] copy];
+        id<SPDeviceType> deviceType = [device valueForKey:@"deviceType"];
+        if ([deviceType respondsToSelector:@selector(bundlePath)]) {
+            _deviceTypePath = [[deviceType bundlePath] copy];
+        }
+        _screenScale = [deviceType respondsToSelector:@selector(mainScreenScale)]
+            ? [deviceType mainScreenScale]
+            : 1;
         _display = [SPSimulator mainDisplayOfDevice:device];
         _hidQueue = dispatch_queue_create("simpanel.hid", DISPATCH_QUEUE_SERIAL);
     }

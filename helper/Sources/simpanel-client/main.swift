@@ -133,6 +133,13 @@ while elapsed() < seconds + (acts ? 1 : 0) {
             try jpeg.write(to: out.appendingPathComponent(tapped ? "after-tap.jpg" : "latest.jpg"))
         case .error(let error):
             fail("\(error.code.rawValue): \(error.message)")
+        case .chrome(let chrome):
+            let buttons = chrome.buttons.map(\.button.rawValue).joined(separator: ", ")
+            print(
+                "chrome: \(chrome.width) x \(chrome.height) pt at \(chrome.scale)x,",
+                "corners \(chrome.screenCornerRadius) pt, \(chrome.bezel.count / 1024) KB, \(buttons)"
+            )
+            try chrome.bezel.write(to: out.appendingPathComponent("bezel.png"))
         case nil:
             break
         }

@@ -54,6 +54,19 @@ do {
     finish(1)
 }
 
+/// The device to draw around the screen, or nil to show the screen alone.
+func chrome(for simulator: SPSimulator, surface: IOSurface) -> Chrome? {
+    guard let path = simulator.deviceTypePath else { return nil }
+    let scale = simulator.screenScale
+    let screen = CGSize(width: Double(surface.width) / scale, height: Double(surface.height) / scale)
+    do {
+        return try ChromeRenderer.render(deviceTypePath: path, screen: screen, scale: scale)
+    } catch {
+        log("no device chrome: \(error)")
+        return nil
+    }
+}
+
 let simulator: SPSimulator
 do {
     simulator = try SPSimulator(udid: udid, developerDir: developerDirectory())
@@ -69,6 +82,9 @@ do {
     )
     try connection.write(HelperMessage.hello(hello).encoded())
     log("attached to \(simulator.name), \(surface.width) x \(surface.height)")
+    if let chrome = chrome(for: simulator, surface: surface) {
+        try connection.write(HelperMessage.chrome(chrome).encoded())
+    }
 } catch {
     let failure = error as? HelperError
         ?? HelperError(code: ErrorCode(error), message: error.localizedDescription)

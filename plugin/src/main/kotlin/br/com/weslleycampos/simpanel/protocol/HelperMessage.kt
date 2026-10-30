@@ -16,6 +16,19 @@ sealed interface HelperMessage {
 
     class Frame(val jpeg: ByteArray) : HelperMessage
 
+    /** The device drawn around the screen, in points, with its images as PNGs at [scale] pixels a point. */
+    @Serializable
+    class Chrome(
+        val width: Double,
+        val height: Double,
+        val scale: Double,
+        val screen: ChromeRect,
+        val screenCornerRadius: Double = 0.0,
+        /** The body, with the screen cut out of it. */
+        @Serializable(with = Base64Serializer::class) val bezel: ByteArray,
+        val buttons: List<ChromeButton>,
+    ) : HelperMessage
+
     @Serializable
     data class Failure(val code: String, val message: String) : HelperMessage {
         val errorCode: ErrorCode get() = ErrorCode.of(code)
@@ -27,6 +40,7 @@ sealed interface HelperMessage {
             MessageType.Hello -> SimPanelJson.decodeFromString<Hello>(message.payload.decodeToString())
             MessageType.Frame -> Frame(message.payload)
             MessageType.Error -> SimPanelJson.decodeFromString<Failure>(message.payload.decodeToString())
+            MessageType.Chrome -> SimPanelJson.decodeFromString<Chrome>(message.payload.decodeToString())
             else -> null
         }
     }
