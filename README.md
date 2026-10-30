@@ -19,10 +19,14 @@ helper/     Swift package: the simpanel helper, which reads the simulator's fram
   Tests/SimPanelKitTests/   protocol tests, run with `swift test`
 plugin/     Gradle build of the Android Studio plugin, which bundles the helper in bin/
   protocol/    the same socket protocol, read and written over a JDK Unix socket channel
-  simulators/  the device list and boot, through `xcrun simctl`
+  simulators/  the device list, boot, paste and screenshots through `xcrun simctl`, and
+               the orientation through `xcrun devicectl`
   helper/      HelperSession, which starts one helper, decodes its frames and sends input
-  screen/      fitting the screen into the panel and turning clicks into screen fractions
-  ui/          the tool window: device picker, Refresh, the live screen and its status text
+  screen/      placing the screen and its device frame, zoom levels, turning the screen
+               with the simulator and turning clicks into screen fractions
+  keyboard/    the Mac keyboard as HID usages on the simulator's US layout
+  shutdown/    asking to shut down the simulators the panel booted as the project closes
+  ui/          the tool window: device picker, toolbar, the live screen, zoom controls
 icons/      devicehub.svg, a 512 px icon in DeviceHub's style; the tool window's 20 px icon
             and its _dark variant are in plugin/src/main/resources/icons
 ```
@@ -50,8 +54,25 @@ Disk.
 
 The iOS Simulator tool window on the right lists the iOS simulators, newest runtime first,
 and opens the booted one it showed last, or the first booted one. Picking a shut-down
-simulator boots it. Clicks and drags on the screen become taps and swipes. When the helper
-fails or exits, the panel says why and offers Retry.
+simulator boots it. When the helper fails or exits, the panel says why and offers Retry.
+
+- Clicks and drags on the screen become taps and swipes; the trackpad or wheel scrolls what
+  lies under the pointer, as a finger dragging it.
+- The panel draws the device around the screen; its buttons press when clicked.
+- Beside the picker are Refresh and Shut Down. The controls below have Power, Volume Up and
+  Down, Rotate Left and Right, Home, App Switcher, Take Screenshot, Paste and the Show
+  Device Frame toggle. Rotating turns the simulator through `xcrun devicectl`, and the
+  screen and its frame turn with it. The panel reads the orientation when it attaches, so a
+  turn made in Simulator.app shows only after the panel reattaches.
+- While the screen has focus, the Mac keyboard types on the simulator's US layout,
+  including Option characters and accents through their dead keys. Characters the layout
+  has no keys for are pasted. ⌘V pastes the Mac's clipboard, and ⌘A, ⌘C, ⌘X and ⌘Z edit text
+  on the simulator; other ⌘ and Control shortcuts stay with the IDE.
+- The floating pill at the bottom right zooms: Zoom In (⌘=), Zoom Out (⌘-), Actual Size
+  (⌘.), one simulator pixel per display pixel, and Fit (⌘/), and shows the zoom. Its
+  chevron folds it to the percentage. Past Fit the screen scrolls in the panel.
+- Closing a project asks whether to shut down the simulators its panel opened that are
+  still booted; Advanced Settings can make it always shut them down or keep them running.
 
 `SIMPANEL_UDID=<udid> ./gradlew test` also runs the live test, which relaunches Settings on
 that simulator, swipes it through a real helper and expects 25 decoded frames a second. It
@@ -79,7 +100,9 @@ To drive it without the plugin, run the client in a second terminal:
 ```
 
 It sends the viewport, swipes or taps (`--tap x,y`) in screen fractions, saves the latest
-frame to `frames/latest.jpg` and prints the frame rate across the scroll.
+frame to `frames/latest.jpg` and prints the frame rate across the scroll. `--scroll
+x,y,dx,dy` scrolls, `--button home` presses a button and `--keys` presses HID usages, each
+`S` (Shift) `A` (Option) or `C` (Command) prefixed, such as `S11,A8,C25`.
 
 ### Protocol
 
@@ -91,13 +114,20 @@ Frames are JPEG; everything else is JSON.
 | 1 `hello` | helper to plugin | `udid`, `name`, `width`, `height`, `orientation` |
 | 2 `frame` | helper to plugin | JPEG, scaled to fit the viewport, never above full size |
 | 4 `error` | helper to plugin | `code`, `message`; the helper exits after sending it |
+| 5 `chrome` | helper to plugin | the device frame: its size, screen and corners, bezel and button PNGs |
 | 16 `viewport` | plugin to helper | `width`, `height` in pixels |
 | 17 `touch` | plugin to helper | `phase` (`down`, `move`, `up`), `x`, `y` as screen fractions |
+| 18 `scroll` | plugin to helper | `x`, `y`, `dx`, `dy` as screen fractions; the helper drags a finger by them |
+| 19 `key` | plugin to helper | `usage`, a HID keyboard usage, and `down` |
+| 21 `button` | plugin to helper | `button` (`home`, `power`, `volume-up`, `volume-down`, `action`, `siri`) and `down` |
 
 Error codes: `device_not_found`, `device_not_booted`, `framebuffer_unavailable`,
-`hid_unavailable`, `xcode_not_found`, `unsupported_xcode` and `internal`. Types 3, 18 to 22
-(`display`, `scroll`, `key`, `text`, `button`, `settings`) are reserved for later milestones
-and ignored today.
+`hid_unavailable`, `xcode_not_found`, `unsupported_xcode` and `internal`. Types 3, 20 and 22
+(`display`, `text`, `settings`) are reserved and ignored today.
+
+The framebuffer stays portrait when the simulator turns, so touches and scrolls are always
+fractions of the portrait screen and the viewport is its upright size; the plugin turns the
+frames for display and turns clicks back.
 
 The helper polls the framebuffer 30 times a second and sends a frame only when the surface
 or its seed changed. Through the socket, at a 400 x 870 viewport in a release build:
