@@ -10,3 +10,4 @@ build/
 *.iml
 local.properties
 *.hprof
+.kotlin/
