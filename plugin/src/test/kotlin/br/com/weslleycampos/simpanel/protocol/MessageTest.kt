@@ -79,6 +79,14 @@ class MessageTest {
     }
 
     @Test
+    fun writesTheKeyTheHelperReads() {
+        val key = PluginMessage.Key(0xe1, down = false)
+
+        assertEquals(MessageType.Key.code, key.encoded()[4])
+        assertEquals("""{"usage":225,"down":false}""", json(key))
+    }
+
+    @Test
     fun writesTheButtonTheHelperReads() {
         val press = PluginMessage.Button(DeviceButton.VolumeUp, down = true)
 

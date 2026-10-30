@@ -46,6 +46,17 @@ public struct Scroll: Codable, Equatable, Sendable {
     }
 }
 
+/// A keyboard key going down or up, by its HID usage on the keyboard page.
+public struct Key: Codable, Equatable, Sendable {
+    public let usage: UInt32
+    public let down: Bool
+
+    public init(usage: UInt32, down: Bool) {
+        self.usage = usage
+        self.down = down
+    }
+}
+
 /// A hardware button going down or up, named as the device chrome names it.
 public struct ButtonPress: Codable, Equatable, Sendable {
     public let button: DeviceButton
@@ -71,6 +82,7 @@ public enum PluginMessage: Equatable, Sendable {
     case viewport(Viewport)
     case touch(Touch)
     case scroll(Scroll)
+    case key(Key)
     case button(ButtonPress)
 
     public func encoded() throws -> Data {
@@ -84,6 +96,8 @@ public enum PluginMessage: Equatable, Sendable {
             Framing.encode(type: MessageType.touch.rawValue, payload: try JSONEncoder().encode(touch))
         case .scroll(let scroll):
             Framing.encode(type: MessageType.scroll.rawValue, payload: try JSONEncoder().encode(scroll))
+        case .key(let key):
+            Framing.encode(type: MessageType.key.rawValue, payload: try JSONEncoder().encode(key))
         case .button(let press):
             Framing.encode(type: MessageType.button.rawValue, payload: try JSONEncoder().encode(press))
         }
@@ -95,6 +109,7 @@ public enum PluginMessage: Equatable, Sendable {
         case .viewport: .viewport(try JSONDecoder().decode(Viewport.self, from: payload))
         case .touch: .touch(try JSONDecoder().decode(Touch.self, from: payload))
         case .scroll: .scroll(try JSONDecoder().decode(Scroll.self, from: payload))
+        case .key: .key(try JSONDecoder().decode(Key.self, from: payload))
         case .button: .button(try JSONDecoder().decode(ButtonPress.self, from: payload))
         default: nil
         }

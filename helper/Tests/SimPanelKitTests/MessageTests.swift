@@ -89,6 +89,15 @@ struct MessageTests {
         #expect(try decodePlugin(message!) == message)
     }
 
+    @Test func decodesAKeyAsThePluginWritesIt() throws {
+        let payload = Data(#"{"usage":225,"down":false}"#.utf8)
+
+        let message = try PluginMessage.decode(type: MessageType.key.rawValue, payload: payload)
+
+        #expect(message == .key(Key(usage: 225, down: false)))
+        #expect(try decodePlugin(message!) == message)
+    }
+
     @Test func decodesAButtonAsThePluginWritesIt() throws {
         let payload = Data(#"{"button":"volume-up","down":true}"#.utf8)
 

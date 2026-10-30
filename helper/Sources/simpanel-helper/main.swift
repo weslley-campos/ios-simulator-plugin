@@ -113,6 +113,8 @@ func handle(_ message: PluginMessage) {
         touch.send(to: simulator)
     case .scroll(let scroll):
         scroller.scroll(scroll)
+    case .key(let key):
+        simulator.key(key.usage, down: key.down)
     case .button(let press):
         press.button.send(down: press.down, to: simulator)
     }

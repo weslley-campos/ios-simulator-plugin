@@ -13,7 +13,7 @@ interface SimulatorControls {
     /** Saves a screenshot where Simulator saves them and copies it to the clipboard. */
     fun takeScreenshot()
 
-    /** Hands the Mac clipboard's text to the simulator's pasteboard. */
+    /** Pastes the Mac clipboard's text where the simulator's cursor is, leaving it on its pasteboard. */
     fun paste()
 
     /** Shuts the simulator down, leaving a Boot link in its place. */

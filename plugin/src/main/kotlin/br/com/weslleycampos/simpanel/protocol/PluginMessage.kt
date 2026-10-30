@@ -31,6 +31,13 @@ sealed interface PluginMessage {
             Framing.encode(MessageType.Scroll, SimPanelJson.encodeToString(this).encodeToByteArray())
     }
 
+    /** A key of the hardware keyboard, given as its HID usage, going down or up. */
+    @Serializable
+    data class Key(val usage: Int, val down: Boolean) : PluginMessage {
+        override fun encoded() =
+            Framing.encode(MessageType.Key, SimPanelJson.encodeToString(this).encodeToByteArray())
+    }
+
     /** A hardware button going down or up. */
     @Serializable
     data class Button(val button: DeviceButton, val down: Boolean) : PluginMessage {

@@ -1,17 +1,23 @@
 package br.com.weslleycampos.simpanel.ui
 
+import br.com.weslleycampos.simpanel.keyboard.HidUsage
+import br.com.weslleycampos.simpanel.keyboard.Keystroke
 import br.com.weslleycampos.simpanel.protocol.DeviceButton
 import br.com.weslleycampos.simpanel.protocol.PluginMessage
 import br.com.weslleycampos.simpanel.protocol.TouchPhase
 import br.com.weslleycampos.simpanel.screen.proMaxFrame
 import java.awt.Color
+import java.awt.Component
 import java.awt.Dimension
 import java.awt.event.InputEvent
+import java.awt.event.KeyEvent
 import java.awt.event.MouseEvent
 import java.awt.event.MouseWheelEvent
 import java.awt.image.BufferedImage
+import javax.swing.JPanel
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ScreenViewTest {
@@ -189,5 +195,22 @@ class ScreenViewTest {
             listOf(PluginMessage.Button(power, down = true), PluginMessage.Button(power, down = false)),
             presses,
         )
+    }
+
+    @Test
+    fun typesItsOwnKeysWhileItShowsTheScreen() {
+        val view = view()
+        val keys = mutableListOf<PluginMessage.Key>()
+        view.onKey = { keys += it }
+        val typed = { source: Component ->
+            KeyEvent(source, KeyEvent.KEY_TYPED, 0, 0, KeyEvent.VK_UNDEFINED, 'a')
+        }
+
+        assertFalse(view.dispatchKey(typed(view)), "no screen shows yet")
+        view.show(frame(Color.RED))
+        assertFalse(view.dispatchKey(typed(JPanel())), "another component has focus")
+        assertTrue(view.dispatchKey(typed(view)))
+
+        assertEquals(Keystroke(HidUsage.letter('a')).presses(), keys)
     }
 }

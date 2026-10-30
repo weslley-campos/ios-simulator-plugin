@@ -11,6 +11,7 @@ class SimulatorToolWindowFactory : ToolWindowFactory, DumbAware {
         val panel = SimulatorPanel(project)
         val content = ContentFactory.getInstance().createContent(panel, null, false)
         content.setDisposer(panel)
+        content.preferredFocusableComponent = panel.focusTarget
         toolWindow.contentManager.addContent(content)
     }
 }

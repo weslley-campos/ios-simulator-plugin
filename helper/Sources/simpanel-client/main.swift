@@ -4,7 +4,7 @@
 // simpanel-client --socket <path> --out <dir> [--viewport 400x870] [--seconds 3] [--tap x,y]
 //                 [--swipe x1,y1,x2,y2] [--button home|power|volume-up|volume-down|action|siri]
 //                 [--presses 1] [--gap 0] [--scroll x,y,dx,dy] [--scrolls 1]
-//                 [--keep]
+//                 [--keys S11,A8,C25] [--keep]
 
 import Foundation
 import SimPanelKit
@@ -119,22 +119,12 @@ func sendScrolls(_ values: [Double]) throws {
     print("scrolled \(count) times by \(values[2]), \(values[3])")
 }
 
-let acts = tap.count == 2 || button != nil || scroll.count == 4
-while elapsed() < seconds + (acts ? 1 : 0) {
-    if !tapped, acts, elapsed() >= seconds {
-        if tap.count == 2 { try sendTap(tap) }
-        if let button { try press(button) }
-        if scroll.count == 4 { try sendScrolls(scroll) }
-        tapped = true
-    }
-    while let next = touches.first, next.at <= elapsed() {
-        try connection.write(PluginMessage.touch(next.touch).encoded())
-        touches.removeFirst()
-    }
-    guard connection.waitForData(timeout: 0.005) else { continue }
+/// Reads what the helper sent within `timeout` seconds, saving the frames; false once it closes.
+@MainActor func receive(timeout: Double) throws -> Bool {
+    guard connection.waitForData(timeout: timeout) else { return true }
     guard let data = try connection.read() else {
         print("helper closed the connection")
-        break
+        return false
     }
     decoder.append(data)
     while let (type, payload) = try decoder.next() {
@@ -163,6 +153,47 @@ while elapsed() < seconds + (acts ? 1 : 0) {
             break
         }
     }
+    return true
+}
+
+/// Presses each of `--keys`' usages `--gap` milliseconds apart, holding Shift around those
+/// written with an S, Option around those written with an A and Command around those written
+/// with a C; one written with a D only goes down, and one with a U only comes up. Frames keep
+/// arriving between the presses.
+@MainActor func sendKeys(_ list: String) throws {
+    for item in list.split(separator: ",") {
+        let prefix = item.prefix(while: \.isLetter)
+        let modifiers = prefix.compactMap { ["S": UInt32(0xe1), "A": 0xe2, "C": 0xe3][$0] }
+        guard let usage = UInt32(item.drop(while: \.isLetter)) else { fail("bad key \(item)") }
+        let downs = modifiers.map { ($0, true) } + [(usage, true)]
+        let ups = [(usage, false)] + modifiers.reversed().map { ($0, false) }
+        let presses = prefix.contains("D") ? downs : prefix.contains("U") ? ups : downs + ups
+        for (usage, down) in presses {
+            try connection.write(PluginMessage.key(Key(usage: usage, down: down)).encoded())
+        }
+        let resume = elapsed() + Double(gap) / 1_000_000
+        while elapsed() < resume, try receive(timeout: 0.005) {}
+    }
+    print("typed \(list)")
+}
+
+let keys = option("--keys")
+let acts = tap.count == 2 || button != nil || scroll.count == 4 || keys != nil
+var deadline = seconds + (acts ? 1 : 0)
+while elapsed() < deadline {
+    if !tapped, acts, elapsed() >= seconds {
+        tapped = true
+        if tap.count == 2 { try sendTap(tap) }
+        if let button { try press(button) }
+        if scroll.count == 4 { try sendScrolls(scroll) }
+        if let keys { try sendKeys(keys) }
+        deadline = elapsed() + 1
+    }
+    while let next = touches.first, next.at <= elapsed() {
+        try connection.write(PluginMessage.touch(next.touch).encoded())
+        touches.removeFirst()
+    }
+    guard try receive(timeout: 0.005) else { break }
 }
 
 let average = frames > 0 ? bytes / frames / 1024 : 0

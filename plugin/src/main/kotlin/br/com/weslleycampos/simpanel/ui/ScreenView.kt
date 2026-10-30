@@ -1,6 +1,7 @@
 package br.com.weslleycampos.simpanel.ui
 
 import br.com.weslleycampos.simpanel.SimPanelBundle.message
+import br.com.weslleycampos.simpanel.keyboard.DeviceKeyboard
 import br.com.weslleycampos.simpanel.protocol.PluginMessage
 import br.com.weslleycampos.simpanel.protocol.TouchPhase
 import br.com.weslleycampos.simpanel.screen.DeviceFrame
@@ -23,6 +24,9 @@ import java.awt.Rectangle
 import java.awt.RenderingHints
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
+import java.awt.event.FocusAdapter
+import java.awt.event.FocusEvent
+import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.awt.event.MouseWheelEvent
@@ -38,13 +42,21 @@ private const val WheelUnit = 10.0
 
 /**
  * Paints the simulator's latest frame, fitted to the panel and dressed in the device when the helper
- * sent one, and turns the mouse into touches, scrolls and button presses.
+ * sent one. It turns the mouse into touches, scrolls and button presses, and the keyboard, while it
+ * has focus, into the simulator's.
  */
 class ScreenView : JComponent() {
     var onTouch: (PluginMessage.Touch) -> Unit = {}
     var onScroll: (PluginMessage.Scroll) -> Unit = {}
     var onViewport: (PluginMessage.Viewport) -> Unit = {}
     var onButton: (PluginMessage.Button) -> Unit = {}
+    var onKey: (PluginMessage.Key) -> Unit = {}
+
+    /** Pastes the Mac clipboard, for ⌘V. */
+    var onPaste: () -> Unit = {}
+
+    /** Types text the simulator's keyboard has no keys for by pasting it. */
+    var onPasteText: (String) -> Unit = {}
 
     /** Draws the device around the screen, once the helper has sent it. */
     var frameVisible = true
@@ -58,6 +70,11 @@ class ScreenView : JComponent() {
     private var image: BufferedImage? = null
     private var touching = false
     private var pressed: FrameButton? = null
+    private val keyboard = DeviceKeyboard(
+        onKey = { onKey(it) },
+        onPaste = { onPaste() },
+        onPasteText = { onPasteText(it) },
+    )
     private val status = object : StatusText(this) {
         override fun isStatusVisible() = image == null
     }
@@ -75,6 +92,7 @@ class ScreenView : JComponent() {
 
     init {
         isFocusable = true
+        focusTraversalKeysEnabled = false
         background = JBColor.PanelBackground
         addComponentListener(object : ComponentAdapter() {
             override fun componentResized(e: ComponentEvent) {
@@ -122,7 +140,15 @@ class ScreenView : JComponent() {
         addMouseListener(mouse)
         addMouseMotionListener(mouse)
         addMouseWheelListener(::scroll)
+        addFocusListener(object : FocusAdapter() {
+            override fun focusLost(e: FocusEvent) {
+                keyboard.releaseAll()
+            }
+        })
     }
+
+    /** Types [e] on the simulator while the screen has focus; true when the IDE shouldn't see it. */
+    fun dispatchKey(e: KeyEvent): Boolean = e.component === this && image != null && keyboard.dispatch(e)
 
     /** Starts a new session's screen, bare until [showDeviceFrame] dresses it. */
     fun attach(device: Dimension) {
@@ -151,6 +177,7 @@ class ScreenView : JComponent() {
         image = null
         touching = false
         pressed = null
+        keyboard.releaseAll()
         status.clear()
         status.appendText(text)
         detail?.let { status.appendLine(it, SimpleTextAttributes.GRAYED_ATTRIBUTES, null) }

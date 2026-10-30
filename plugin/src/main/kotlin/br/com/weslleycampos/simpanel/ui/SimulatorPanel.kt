@@ -4,6 +4,7 @@ import br.com.weslleycampos.simpanel.SimPanelBundle.message
 import br.com.weslleycampos.simpanel.helper.HelperBinary
 import br.com.weslleycampos.simpanel.helper.HelperEvent
 import br.com.weslleycampos.simpanel.helper.HelperSession
+import br.com.weslleycampos.simpanel.keyboard.Keystroke
 import br.com.weslleycampos.simpanel.protocol.DeviceButton
 import br.com.weslleycampos.simpanel.protocol.ErrorCode
 import br.com.weslleycampos.simpanel.protocol.HelperMessage
@@ -15,6 +16,7 @@ import br.com.weslleycampos.simpanel.ui.actions.ControlAction
 import br.com.weslleycampos.simpanel.ui.actions.FrameToggleAction
 import br.com.weslleycampos.simpanel.ui.actions.SimulatorControls
 import com.intellij.icons.AllIcons
+import com.intellij.ide.IdeEventQueue
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
@@ -40,15 +42,20 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.datatransfer.DataFlavor
+import java.awt.event.KeyEvent
 import java.nio.file.Path
 import java.time.LocalDateTime
 import javax.imageio.ImageIO
+import javax.swing.JComponent
 import javax.swing.JPanel
+import kotlin.time.Duration.Companion.milliseconds
 
 private const val LastUdidKey = "simpanel.lastUdid"
 private const val FrameVisibleKey = "simpanel.frameVisible"
@@ -56,6 +63,9 @@ private const val ToolbarPlace = "SimPanelToolbar"
 private const val ControlsPlace = "SimPanelControls"
 private val Log = logger<SimulatorPanel>()
 private val ScreenshotDirectory = Path.of(System.getProperty("user.home"), "Desktop")
+
+/** How long the simulator takes to paste, so that keys typed after ⌘V land after the text. */
+private val PasteSettle = 400.milliseconds
 
 /**
  * The tool window's content: a device picker and the simulator's controls above the live screen
@@ -74,6 +84,9 @@ class SimulatorPanel(private val project: Project) :
     private var sessionJob: Job? = null
     private var openSimulator: Simulator? = null
 
+    /** What was typed, in order, so that a paste's text lands before the keys typed after it. */
+    private val typing = Channel<suspend () -> Unit>(Channel.UNLIMITED)
+
     private var toolbars = emptyList<ActionToolbar>()
 
     override var attached = false
@@ -81,6 +94,9 @@ class SimulatorPanel(private val project: Project) :
             field = value
             toolbars.forEach { it.updateActionsAsync() }
         }
+
+    /** The screen, which takes the keyboard when the tool window is shown. */
+    val focusTarget: JComponent get() = screen
 
     init {
         devices.renderer = SimulatorRenderer()
@@ -112,6 +128,16 @@ class SimulatorPanel(private val project: Project) :
         screen.onScroll = { session?.send(it) }
         screen.onViewport = { session?.send(it) }
         screen.onButton = { session?.send(it) }
+        screen.onKey = { key -> typing.trySend { session?.send(key) } }
+        screen.onPaste = ::paste
+        screen.onPasteText = ::typeByPasting
+        IdeEventQueue.getInstance().addDispatcher(
+            IdeEventQueue.EventDispatcher { it is KeyEvent && screen.dispatchKey(it) },
+            this,
+        )
+        scope.launch {
+            for (step in typing) step()
+        }
         screen.frameVisible = PropertiesComponent.getInstance().getBoolean(FrameVisibleKey, true)
         screen.showStatus(message("status.loading"))
         refresh()
@@ -149,17 +175,7 @@ class SimulatorPanel(private val project: Project) :
     }
 
     override fun paste() {
-        val simulator = openSimulator ?: return
-        val text = CopyPasteManager.getInstance().getContents<String>(DataFlavor.stringFlavor) ?: return
-        scope.launch {
-            try {
-                withContext(Dispatchers.IO) { Simctl.pbcopy(simulator.udid, text) }
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                Log.warn(e)
-                SimPanelNotifications.failed(project, message("paste.failed"), e.message)
-            }
-        }
+        CopyPasteManager.getInstance().getContents<String>(DataFlavor.stringFlavor)?.let(::typeByPasting)
     }
 
     override var frameVisible: Boolean
@@ -189,6 +205,22 @@ class SimulatorPanel(private val project: Project) :
                 screen.showStatus(failed, e.message, action = { open(simulator) })
             }
             refresh(openSelected = false)
+        }
+    }
+
+    /** Puts [text] on the simulator's pasteboard and presses ⌘V, after what was typed before. */
+    private fun typeByPasting(text: String) {
+        val simulator = openSimulator ?: return
+        typing.trySend {
+            try {
+                withContext(Dispatchers.IO) { Simctl.pbcopy(simulator.udid, text) }
+                Keystroke.Paste.presses().forEach { session?.send(it) }
+                delay(PasteSettle)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.warn(e)
+                SimPanelNotifications.failed(project, message("paste.failed"), e.message)
+            }
         }
     }
 
