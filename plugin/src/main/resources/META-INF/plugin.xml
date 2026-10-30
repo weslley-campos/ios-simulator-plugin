@@ -1,0 +1,18 @@
+<idea-plugin>
+    <id>br.com.weslleycampos.simpanel</id>
+    <name>iOS Simulator Panel</name>
+    <vendor>Weslley Campos</vendor>
+    <description><![CDATA[
+        Shows a booted iOS simulator in a tool window, live and interactive, the way Running
+        Devices shows the Android emulator. Click to tap and drag to swipe.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <resource-bundle>messages.SimPanelBundle</resource-bundle>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="iOS Simulator" anchor="right" os="mac" icon="/icons/toolWindow.svg"
+                    factoryClass="br.com.weslleycampos.simpanel.ui.SimulatorToolWindowFactory"/>
+    </extensions>
+</idea-plugin>

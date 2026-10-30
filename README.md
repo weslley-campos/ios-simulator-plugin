@@ -17,13 +17,46 @@ helper/     Swift package: the simpanel helper, which reads the simulator's fram
   Sources/simpanel-client/  a stand-in for the plugin, to drive the helper from a terminal
   Sources/simpanel-spike/   milestone 1, the throwaway proof of the route
   Tests/SimPanelKitTests/   protocol tests, run with `swift test`
-icons/      devicehub.svg, a 512 px icon in DeviceHub's style, and toolWindow.svg with its
-            _dark variant, the 16 px glyph for the tool window
+plugin/     Gradle build of the Android Studio plugin, which bundles the helper in bin/
+  protocol/    the same socket protocol, read and written over a JDK Unix socket channel
+  simulators/  the device list and boot, through `xcrun simctl`
+  helper/      HelperSession, which starts one helper, decodes its frames and sends input
+  screen/      fitting the screen into the panel and turning clicks into screen fractions
+  ui/          the tool window: device picker, Refresh, the live screen and its status text
+icons/      devicehub.svg, a 512 px icon in DeviceHub's style; the tool window's 20 px icon
+            and its _dark variant are in plugin/src/main/resources/icons
 ```
 
 ## Requirements
 
-Apple silicon, Xcode 27.1 selected with `xcode-select`, and a booted iOS 27 simulator.
+Apple silicon, Xcode 27.1 selected with `xcode-select`, and a booted iOS 27 simulator. The
+plugin targets Android Studio 2026.2.2 (build 262) and builds with JDK 25, because the
+platform it compiles against is Java 25 bytecode.
+
+## Plugin
+
+```sh
+cd plugin
+./gradlew runIde      # a sandbox Android Studio with the plugin and its helper
+./gradlew buildPlugin # build/distributions/simpanel-0.1.0.zip
+./gradlew test
+```
+
+`androidStudioPath` in `gradle.properties` points at the Android Studio the plugin compiles
+against and `runIde` starts; override it with `-PandroidStudioPath=...`. The build compiles
+the helper in release mode and copies it into every sandbox and the zip. To use the plugin
+in your own Android Studio, install the zip from Settings, Plugins, Install Plugin from
+Disk.
+
+The iOS Simulator tool window on the right lists the iOS simulators, newest runtime first,
+and opens the booted one it showed last, or the first booted one. Picking a shut-down
+simulator boots it. Clicks and drags on the screen become taps and swipes. When the helper
+fails or exits, the panel says why and offers Retry.
+
+`SIMPANEL_UDID=<udid> ./gradlew test` also runs the live test, which relaunches Settings on
+that simulator, swipes it through a real helper and expects 25 decoded frames a second. It
+measured 30.4 fps at 400 x 870. Run it on a simulator no panel is showing: a second helper's
+touches don't land on a device another helper already drives.
 
 ## Helper
 
