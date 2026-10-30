@@ -2,7 +2,8 @@
 // taps the screen.
 //
 // simpanel-client --socket <path> --out <dir> [--viewport 400x870] [--seconds 3] [--tap x,y]
-//                 [--swipe x1,y1,x2,y2]
+//                 [--swipe x1,y1,x2,y2] [--button home|power|volume-up|volume-down|action|siri]
+//                 [--presses 1] [--gap 0]
 
 import Foundation
 import SimPanelKit
@@ -42,6 +43,10 @@ let viewport = numbers(option("--viewport") ?? "400x870", separator: "x")
 let seconds = Double(option("--seconds") ?? "3") ?? 3
 let tap = numbers(option("--tap"), separator: ",")
 let swipe = numbers(option("--swipe"), separator: ",")
+let button = option("--button").map { name -> DeviceButton in
+    guard let button = DeviceButton(rawValue: name) else { fail("unknown button \(name)") }
+    return button
+}
 let swipeStart = 0.5
 let swipeDuration = 0.4
 try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
@@ -79,6 +84,20 @@ var decoder = FrameDecoder()
 
 func elapsed() -> Double { Date().timeIntervalSince(start) }
 
+let presses = Int(option("--presses") ?? "1") ?? 1
+let gap = useconds_t((Double(option("--gap") ?? "0") ?? 0) * 1000)
+
+/// Writes the presses `--gap` milliseconds apart; with no gap, back to back.
+func press(_ button: DeviceButton) throws {
+    for _ in 0..<presses {
+        for down in [true, false] {
+            try connection.write(PluginMessage.button(ButtonPress(button: button, down: down)).encoded())
+            usleep(gap)
+        }
+    }
+    print("pressed \(button.rawValue) \(presses) times")
+}
+
 func sendTap(_ point: [Double]) throws {
     try connection.write(PluginMessage.touch(Touch(phase: .down, x: point[0], y: point[1])).encoded())
     usleep(60_000)
@@ -86,9 +105,11 @@ func sendTap(_ point: [Double]) throws {
     print("tapped at \(point[0]), \(point[1])")
 }
 
-while elapsed() < seconds + (tap.count == 2 ? 1 : 0) {
-    if !tapped, tap.count == 2, elapsed() >= seconds {
-        try sendTap(tap)
+let acts = tap.count == 2 || button != nil
+while elapsed() < seconds + (acts ? 1 : 0) {
+    if !tapped, acts, elapsed() >= seconds {
+        if tap.count == 2 { try sendTap(tap) }
+        if let button { try press(button) }
         tapped = true
     }
     while let next = touches.first, next.at <= elapsed() {

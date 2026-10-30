@@ -30,10 +30,31 @@ public struct Touch: Codable, Equatable, Sendable {
     }
 }
 
+/// A hardware button going down or up, named as the device chrome names it.
+public struct ButtonPress: Codable, Equatable, Sendable {
+    public let button: DeviceButton
+    public let down: Bool
+
+    public init(button: DeviceButton, down: Bool) {
+        self.button = button
+        self.down = down
+    }
+}
+
+public enum DeviceButton: String, Codable, Sendable {
+    case home
+    case power
+    case volumeUp = "volume-up"
+    case volumeDown = "volume-down"
+    case action
+    case siri
+}
+
 /// What the plugin sends the helper.
 public enum PluginMessage: Equatable, Sendable {
     case viewport(Viewport)
     case touch(Touch)
+    case button(ButtonPress)
 
     public func encoded() throws -> Data {
         switch self {
@@ -44,6 +65,8 @@ public enum PluginMessage: Equatable, Sendable {
             )
         case .touch(let touch):
             Framing.encode(type: MessageType.touch.rawValue, payload: try JSONEncoder().encode(touch))
+        case .button(let press):
+            Framing.encode(type: MessageType.button.rawValue, payload: try JSONEncoder().encode(press))
         }
     }
 
@@ -52,6 +75,7 @@ public enum PluginMessage: Equatable, Sendable {
         switch MessageType(rawValue: type) {
         case .viewport: .viewport(try JSONDecoder().decode(Viewport.self, from: payload))
         case .touch: .touch(try JSONDecoder().decode(Touch.self, from: payload))
+        case .button: .button(try JSONDecoder().decode(ButtonPress.self, from: payload))
         default: nil
         }
     }

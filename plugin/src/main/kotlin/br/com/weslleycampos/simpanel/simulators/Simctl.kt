@@ -1,13 +1,16 @@
 package br.com.weslleycampos.simpanel.simulators
 
 import com.intellij.execution.configurations.GeneralCommandLine
-import com.intellij.execution.util.ExecUtil
+import com.intellij.execution.process.CapturingProcessHandler
+import java.nio.file.Path
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 private val ListTimeout = 30.seconds
 private val BootTimeout = 3.minutes
+private val ScreenshotTimeout = 10.seconds
+private val PasteTimeout = 10.seconds
 
 /** Blocking calls to `xcrun simctl`; run them off the EDT. */
 object Simctl {
@@ -18,9 +21,21 @@ object Simctl {
         run(BootTimeout, "bootstatus", udid, "-b")
     }
 
-    private fun run(timeout: Duration, vararg arguments: String): String {
+    /** Saves the main display as a PNG at [file]. */
+    fun screenshot(udid: String, file: Path) {
+        run(ScreenshotTimeout, "io", udid, "screenshot", "--type=png", file.toString())
+    }
+
+    /** Replaces the simulator's pasteboard with [text]. */
+    fun pbcopy(udid: String, text: String) {
+        run(PasteTimeout, "pbcopy", udid, input = text)
+    }
+
+    private fun run(timeout: Duration, vararg arguments: String, input: String? = null): String {
         val command = GeneralCommandLine("xcrun", "simctl", *arguments)
-        val output = ExecUtil.execAndGetOutput(command, timeout.inWholeMilliseconds.toInt())
+        val handler = CapturingProcessHandler(command)
+        input?.let { text -> handler.processInput.use { it.write(text.encodeToByteArray()) } }
+        val output = handler.runProcess(timeout.inWholeMilliseconds.toInt())
         if (output.isTimeout || output.exitCode != 0) {
             throw SimctlException(command.commandLineString, output.stderr.ifBlank { output.stdout })
         }

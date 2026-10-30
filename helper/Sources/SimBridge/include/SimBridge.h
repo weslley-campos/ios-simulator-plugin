@@ -50,6 +50,9 @@ typedef NS_ENUM(NSInteger, SPButton) {
 
 - (void)button:(SPButton)button down:(BOOL)down;
 
+/// Presses a button by its HID usage page and usage, as the device chrome lists them.
+- (void)usagePage:(uint32_t)page usage:(uint32_t)usage down:(BOOL)down;
+
 /// Sends a key by its HID keyboard usage code.
 - (void)key:(uint32_t)usage down:(BOOL)down;
 

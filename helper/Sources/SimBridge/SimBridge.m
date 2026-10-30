@@ -40,6 +40,8 @@ typedef void *_Nullable (*IndigoMouseFn)(CGPoint *point, CGPoint *_Nullable seco
                                          NSUInteger edge);
 typedef void *_Nullable (*IndigoButtonFn)(uint32_t source, uint32_t direction, uint32_t target);
 typedef void *_Nullable (*IndigoKeyboardFn)(uint32_t usage, uint32_t direction);
+typedef void *_Nullable (*IndigoArbitraryFn)(uint32_t target, uint32_t page, uint32_t usage,
+                                             uint32_t direction);
 
 @protocol SPServiceContextClass <NSObject>
 + (nullable id)sharedServiceContextForDeveloperDir:(NSString *)developerDir
@@ -89,6 +91,7 @@ static NSError *SPMakeError(SPError code, NSString *message) {
 @property (nonatomic, assign) IndigoMouseFn mouseMessage;
 @property (nonatomic, assign) IndigoButtonFn buttonMessage;
 @property (nonatomic, assign) IndigoKeyboardFn keyboardMessage;
+@property (nonatomic, assign) IndigoArbitraryFn arbitraryMessage;
 @end
 
 @implementation SPSimulator
@@ -188,9 +191,12 @@ static NSError *SPMakeError(SPError code, NSString *message) {
     self.buttonMessage = (IndigoButtonFn)dlsym(self.simulatorKit, "IndigoHIDMessageForButton");
     self.keyboardMessage =
         (IndigoKeyboardFn)dlsym(self.simulatorKit, "IndigoHIDMessageForKeyboardArbitrary");
+    self.arbitraryMessage =
+        (IndigoArbitraryFn)dlsym(self.simulatorKit, "IndigoHIDMessageForHIDArbitrary");
     Class clientClass = NSClassFromString(@"SimulatorKit.SimDeviceLegacyHIDClient")
         ?: NSClassFromString(@"_TtC12SimulatorKit24SimDeviceLegacyHIDClient");
-    if (!self.mouseMessage || !self.buttonMessage || !self.keyboardMessage || !clientClass) {
+    if (!self.mouseMessage || !self.buttonMessage || !self.keyboardMessage
+        || !self.arbitraryMessage || !clientClass) {
         if (error) *error = SPMakeError(SPErrorHIDUnavailable, @"IndigoHID symbols missing");
         return NO;
     }
@@ -226,6 +232,13 @@ static NSError *SPMakeError(SPError code, NSString *message) {
     if (button == SPButtonSiri) source = IndigoButtonSiri;
     uint32_t direction = down ? IndigoDirectionDown : IndigoDirectionUp;
     [self send:self.buttonMessage(source, direction, IndigoTargetButton)];
+}
+
+- (void)usagePage:(uint32_t)page usage:(uint32_t)usage down:(BOOL)down {
+    uint32_t direction = down ? IndigoDirectionDown : IndigoDirectionUp;
+    // Arbitrary usages reach the device only through the digitizer target; the button target
+    // drops them without an error.
+    [self send:self.arbitraryMessage(IndigoTargetDigitizer, page, usage, direction)];
 }
 
 - (void)key:(uint32_t)usage down:(BOOL)down {

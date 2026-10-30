@@ -4,20 +4,27 @@ import br.com.weslleycampos.simpanel.SimPanelBundle.message
 import br.com.weslleycampos.simpanel.helper.HelperBinary
 import br.com.weslleycampos.simpanel.helper.HelperEvent
 import br.com.weslleycampos.simpanel.helper.HelperSession
+import br.com.weslleycampos.simpanel.protocol.DeviceButton
 import br.com.weslleycampos.simpanel.protocol.HelperMessage
+import br.com.weslleycampos.simpanel.protocol.PluginMessage
 import br.com.weslleycampos.simpanel.simulators.Simctl
 import br.com.weslleycampos.simpanel.simulators.Simulator
+import br.com.weslleycampos.simpanel.simulators.screenshotFile
+import br.com.weslleycampos.simpanel.ui.actions.ControlAction
+import br.com.weslleycampos.simpanel.ui.actions.SimulatorControls
 import com.intellij.icons.AllIcons
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.application.asContextElement
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
@@ -33,14 +40,24 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.awt.BorderLayout
 import java.awt.Dimension
+import java.awt.datatransfer.DataFlavor
+import java.nio.file.Path
+import java.time.LocalDateTime
+import javax.imageio.ImageIO
 import javax.swing.JPanel
 
 private const val LastUdidKey = "simpanel.lastUdid"
 private const val ToolbarPlace = "SimPanelToolbar"
+private const val ControlsPlace = "SimPanelControls"
 private val Log = logger<SimulatorPanel>()
+private val ScreenshotDirectory = Path.of(System.getProperty("user.home"), "Desktop")
 
-/** The tool window's content: a device picker above the live screen of the picked simulator. */
-class SimulatorPanel(project: Project) : SimpleToolWindowPanel(true, true), Disposable {
+/**
+ * The tool window's content: a device picker and the simulator's controls above the live screen
+ * of the picked simulator.
+ */
+class SimulatorPanel(private val project: Project) :
+    SimpleToolWindowPanel(true, true), Disposable, SimulatorControls {
     private val scope = project.service<SimPanelService>().scope.childScope(
         name = "iOS Simulator panel",
         context = Dispatchers.EDT + ModalityState.any().asContextElement(),
@@ -49,7 +66,10 @@ class SimulatorPanel(project: Project) : SimpleToolWindowPanel(true, true), Disp
     private val screen = ScreenView()
     private var session: HelperSession? = null
     private var sessionJob: Job? = null
-    private var openUdid: String? = null
+    private var openSimulator: Simulator? = null
+
+    override var attached = false
+        private set
 
     init {
         devices.renderer = SimulatorRenderer()
@@ -62,10 +82,16 @@ class SimulatorPanel(project: Project) : SimpleToolWindowPanel(true, true), Disp
         val actions = ActionManager.getInstance()
             .createActionToolbar(ToolbarPlace, DefaultActionGroup(refresh), true)
         actions.targetComponent = this
+        val controls = ActionManager.getInstance()
+            .createActionToolbar(ControlsPlace, controlActions(), true)
+        controls.targetComponent = this
         toolbar = JPanel(BorderLayout()).apply {
             border = JBUI.Borders.empty(2, 4)
-            add(devices, BorderLayout.WEST)
-            add(actions.component, BorderLayout.CENTER)
+            add(JPanel(BorderLayout()).apply {
+                add(devices, BorderLayout.WEST)
+                add(actions.component, BorderLayout.CENTER)
+            }, BorderLayout.NORTH)
+            add(controls.component, BorderLayout.SOUTH)
         }
         setContent(screen)
         screen.onTouch = { session?.send(it) }
@@ -77,6 +103,61 @@ class SimulatorPanel(project: Project) : SimpleToolWindowPanel(true, true), Disp
     override fun dispose() {
         scope.cancel()
     }
+
+    override fun press(vararg buttons: DeviceButton) {
+        val session = session ?: return
+        for (button in buttons) {
+            session.send(PluginMessage.Button(button, down = true))
+            session.send(PluginMessage.Button(button, down = false))
+        }
+    }
+
+    override fun takeScreenshot() {
+        val simulator = openSimulator ?: return
+        scope.launch {
+            try {
+                val file = screenshotFile(ScreenshotDirectory, simulator.name, LocalDateTime.now())
+                val image = withContext(Dispatchers.IO) {
+                    Simctl.screenshot(simulator.udid, file)
+                    ImageIO.read(file.toFile())
+                }
+                CopyPasteManager.getInstance().setContents(ImageTransferable(image))
+                SimPanelNotifications.screenshotSaved(project, file)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.warn(e)
+                SimPanelNotifications.failed(project, message("screenshot.failed"), e.message)
+            }
+        }
+    }
+
+    override fun paste() {
+        val simulator = openSimulator ?: return
+        val text = CopyPasteManager.getInstance().getContents<String>(DataFlavor.stringFlavor) ?: return
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) { Simctl.pbcopy(simulator.udid, text) }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.warn(e)
+                SimPanelNotifications.failed(project, message("paste.failed"), e.message)
+            }
+        }
+    }
+
+    private fun controlActions() = DefaultActionGroup(
+        ControlAction(message("action.power"), ControlIcons.Power, this) { press(DeviceButton.Power) },
+        ControlAction(message("action.volumeUp"), ControlIcons.VolumeUp, this) { press(DeviceButton.VolumeUp) },
+        ControlAction(message("action.volumeDown"), ControlIcons.VolumeDown, this) { press(DeviceButton.VolumeDown) },
+        Separator.create(),
+        ControlAction(message("action.home"), ControlIcons.Home, this) { press(DeviceButton.Home) },
+        ControlAction(message("action.appSwitcher"), ControlIcons.AppSwitcher, this) {
+            press(DeviceButton.Home, DeviceButton.Home)
+        },
+        Separator.create(),
+        ControlAction(message("action.screenshot"), ControlIcons.Screenshot, this) { takeScreenshot() },
+        ControlAction(message("action.paste"), AllIcons.Actions.MenuPaste, this) { paste() },
+    )
 
     private fun refresh() {
         scope.launch {
@@ -101,9 +182,9 @@ class SimulatorPanel(project: Project) : SimpleToolWindowPanel(true, true), Disp
     }
 
     private fun open(simulator: Simulator) {
-        if (simulator.udid == openUdid && sessionJob?.isActive == true) return
+        if (simulator.udid == openSimulator?.udid && sessionJob?.isActive == true) return
         sessionJob?.cancel()
-        openUdid = simulator.udid
+        openSimulator = simulator
         PropertiesComponent.getInstance().setValue(LastUdidKey, simulator.udid)
         sessionJob = scope.launch {
             try {
@@ -130,13 +211,19 @@ class SimulatorPanel(project: Project) : SimpleToolWindowPanel(true, true), Disp
         try {
             session.run { event ->
                 when (event) {
-                    is HelperEvent.Attached -> screen.attach(Dimension(event.hello.width, event.hello.height))
+                    is HelperEvent.Attached -> {
+                        attached = true
+                        screen.attach(Dimension(event.hello.width, event.hello.height))
+                    }
                     is HelperEvent.FrameReady -> screen.show(event.image)
                     is HelperEvent.Failed -> failure = event.failure
                 }
             }
         } finally {
-            if (this.session === session) this.session = null
+            if (this.session === session) {
+                this.session = null
+                attached = false
+            }
         }
         val retry = { open(simulator) }
         when (val reason = failure) {

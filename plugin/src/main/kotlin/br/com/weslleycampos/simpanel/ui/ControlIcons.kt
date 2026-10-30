@@ -1,0 +1,15 @@
+package br.com.weslleycampos.simpanel.ui
+
+import com.intellij.openapi.util.IconLoader
+
+/** Running Devices' toolbar icons, copied from Android Studio's artwork under Apache 2.0. */
+object ControlIcons {
+    val Power = icon("power")
+    val VolumeUp = icon("volume-up")
+    val VolumeDown = icon("volume-down")
+    val Home = icon("home")
+    val AppSwitcher = icon("overview")
+    val Screenshot = icon("screenshot")
+
+    private fun icon(name: String) = IconLoader.getIcon("/icons/controls/$name.svg", ControlIcons::class.java)
+}

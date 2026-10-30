@@ -53,4 +53,12 @@ class MessageTest {
         assertEquals(MessageType.Touch.code, touch.encoded()[4])
         assertEquals("""{"phase":"down","x":0.5,"y":0.125}""", json(touch))
     }
+
+    @Test
+    fun writesTheButtonTheHelperReads() {
+        val press = PluginMessage.Button(DeviceButton.VolumeUp, down = true)
+
+        assertEquals(MessageType.Button.code, press.encoded()[4])
+        assertEquals("""{"button":"volume-up","down":true}""", json(press))
+    }
 }

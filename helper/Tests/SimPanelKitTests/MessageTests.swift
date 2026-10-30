@@ -66,6 +66,20 @@ struct MessageTests {
         #expect(message == .touch(Touch(phase: .down, x: 0.5, y: 0.125)))
     }
 
+    @Test func decodesAButtonAsThePluginWritesIt() throws {
+        let payload = Data(#"{"button":"volume-up","down":true}"#.utf8)
+
+        let message = try PluginMessage.decode(type: MessageType.button.rawValue, payload: payload)
+
+        #expect(message == .button(ButtonPress(button: .volumeUp, down: true)))
+    }
+
+    @Test func buttonRoundTrips() throws {
+        let press = PluginMessage.button(ButtonPress(button: .power, down: false))
+
+        #expect(try decodePlugin(press) == press)
+    }
+
     @Test func ignoresTypesItDoesNotHandle() throws {
         #expect(try PluginMessage.decode(type: MessageType.settings.rawValue, payload: Data("{}".utf8)) == nil)
         #expect(try PluginMessage.decode(type: 99, payload: Data()) == nil)

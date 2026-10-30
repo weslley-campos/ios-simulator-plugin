@@ -20,4 +20,11 @@ sealed interface PluginMessage {
         override fun encoded() =
             Framing.encode(MessageType.Touch, SimPanelJson.encodeToString(this).encodeToByteArray())
     }
+
+    /** A hardware button going down or up. */
+    @Serializable
+    data class Button(val button: DeviceButton, val down: Boolean) : PluginMessage {
+        override fun encoded() =
+            Framing.encode(MessageType.Button, SimPanelJson.encodeToString(this).encodeToByteArray())
+    }
 }

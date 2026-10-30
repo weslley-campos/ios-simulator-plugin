@@ -102,6 +102,8 @@ func handle(_ message: PluginMessage) {
         case .up: .up
         }
         simulator.touch(phase, x: clamp(touch.x), y: clamp(touch.y))
+    case .button(let press):
+        press.button.send(down: press.down, to: simulator)
     }
 }
 
