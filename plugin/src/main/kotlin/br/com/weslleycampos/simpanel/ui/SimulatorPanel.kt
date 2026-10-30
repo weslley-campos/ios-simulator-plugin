@@ -5,6 +5,7 @@ import br.com.weslleycampos.simpanel.helper.HelperBinary
 import br.com.weslleycampos.simpanel.helper.HelperEvent
 import br.com.weslleycampos.simpanel.helper.HelperSession
 import br.com.weslleycampos.simpanel.protocol.DeviceButton
+import br.com.weslleycampos.simpanel.protocol.ErrorCode
 import br.com.weslleycampos.simpanel.protocol.HelperMessage
 import br.com.weslleycampos.simpanel.protocol.PluginMessage
 import br.com.weslleycampos.simpanel.simulators.Simctl
@@ -231,6 +232,10 @@ class SimulatorPanel(private val project: Project) :
                 this.session = null
                 attached = false
             }
+        }
+        // The picker's list is a snapshot, so a simulator it shows booted may have shut down since.
+        if (failure?.errorCode == ErrorCode.DeviceNotBooted && simulator.booted) {
+            return attach(simulator.copy(booted = false))
         }
         val retry = { open(simulator) }
         when (val reason = failure) {
