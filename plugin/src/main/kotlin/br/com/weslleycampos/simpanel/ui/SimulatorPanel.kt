@@ -52,6 +52,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -85,6 +86,9 @@ private val PasteSettle = 400.milliseconds
 /** How often the panel lists the simulators while it waits for one to boot. */
 private val BootPoll = 2.seconds
 
+/** How often the panel reads which way up the simulator is held, which DeviceHub may change. */
+private val OrientationPoll = 3.seconds
+
 /**
  * The tool window's content: a device picker and the simulator's controls above the live screen
  * of the picked simulator, with its zoom controls floating over it.
@@ -106,6 +110,9 @@ class SimulatorPanel(private val project: Project) :
     private var waitingForBoot = false
     private var waitingFor: Simulator? = null
     private val openDeviceHub = StatusAction(message("status.openDeviceHub")) { openDeviceHub() }
+
+    /** Rotations started or finished, so that an orientation read that overlaps one doesn't undo it. */
+    private var rotations = 0
 
     /** What was typed, in order, so that a paste's text lands before the keys typed after it. */
     private val typing = Channel<suspend () -> Unit>(Channel.UNLIMITED)
@@ -185,6 +192,7 @@ class SimulatorPanel(private val project: Project) :
 
     override fun rotate(rotation: Rotation) {
         val simulator = openSimulator ?: return
+        rotations++
         scope.launch {
             try {
                 val orientation = withContext(Dispatchers.IO) { Devicectl.rotate(simulator.udid, rotation) }
@@ -193,6 +201,8 @@ class SimulatorPanel(private val project: Project) :
                 if (e is CancellationException) throw e
                 Log.warn(e)
                 SimPanelNotifications.failed(project, message("rotate.failed"), e.message)
+            } finally {
+                rotations++
             }
         }
     }
@@ -411,7 +421,7 @@ class SimulatorPanel(private val project: Project) :
         var attachedAt: TimeMark? = null
         val end = try {
             coroutineScope {
-                launch { showOrientation(simulator) }
+                launch { followOrientation(simulator) }
                 session.run { event ->
                     when (event) {
                         is HelperEvent.Attached -> {
@@ -424,6 +434,7 @@ class SimulatorPanel(private val project: Project) :
                         is HelperEvent.Failed -> failure = event.failure
                     }
                 }
+                coroutineContext.cancelChildren()
             }
             failure?.let(SessionEnd::Failed) ?: SessionEnd.Lost(null)
         } catch (e: Exception) {
@@ -472,13 +483,25 @@ class SimulatorPanel(private val project: Project) :
         }
     }
 
-    /** Turns the screen the way the simulator is held, which it keeps from before the panel showed it. */
-    private suspend fun showOrientation(simulator: Simulator) {
-        try {
-            screen.orientation = withContext(Dispatchers.IO) { Devicectl.orientation(simulator.udid) }
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            Log.warn(e)
+    /**
+     * Turns the screen the way the simulator is held, which it keeps from before the panel showed it,
+     * and turns it again each time DeviceHub turns the simulator, while the panel is shown.
+     */
+    private suspend fun followOrientation(simulator: Simulator) {
+        var failed = false
+        while (true) {
+            if (isShowing) {
+                val rotationsBefore = rotations
+                try {
+                    val orientation = withContext(Dispatchers.IO) { Devicectl.orientation(simulator.udid) }
+                    if (rotations == rotationsBefore) screen.orientation = orientation
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    if (!failed) Log.warn(e)
+                    failed = true
+                }
+            }
+            delay(OrientationPoll)
         }
     }
 }
