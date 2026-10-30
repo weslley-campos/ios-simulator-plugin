@@ -7,12 +7,14 @@ import br.com.weslleycampos.simpanel.screen.DeviceFrame
 import com.intellij.openapi.diagnostic.logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.io.IOException
 import java.net.UnixDomainSocketAddress
 import java.nio.ByteBuffer
@@ -24,9 +26,11 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 
-private val ConnectTimeout = 5.seconds
+/** How long the helper has from its start to say hello, or why it can't. */
+private val AttachTimeout = 5.seconds
 private val ConnectRetry = 50.milliseconds
 private val ExitGrace = 1.seconds
 private val SocketCount = AtomicInteger()
@@ -43,9 +47,11 @@ class HelperSession(private val binary: Path, private val udid: String) {
 
     /**
      * Starts the helper and hands [onEvent] what it sends, in the caller's context, until the helper
-     * closes the connection. Cancelling closes the connection, which stops the helper.
+     * closes the connection. Cancelling closes the connection, which stops the helper. Throws
+     * [HelperTimeoutException] when the helper sends nothing within [AttachTimeout].
      */
     suspend fun run(onEvent: suspend (HelperEvent) -> Unit) {
+        val attachBy = TimeSource.Monotonic.markNow() + AttachTimeout
         val socket = Path.of(
             System.getProperty("java.io.tmpdir"),
             "simpanel-${ProcessHandle.current().pid()}-${SocketCount.incrementAndGet()}.sock",
@@ -59,7 +65,7 @@ class HelperSession(private val binary: Path, private val udid: String) {
             process.errorReader().useLines { lines -> lines.forEach(Log::info) }
         }
         try {
-            connect(socket, process).use { channel -> exchange(channel, onEvent) }
+            connect(socket, process, attachBy).use { channel -> exchange(channel, attachBy, onEvent) }
         } finally {
             withContext(NonCancellable + Dispatchers.IO) {
                 if (!process.waitFor(ExitGrace.inWholeMilliseconds, TimeUnit.MILLISECONDS)) process.destroy()
@@ -68,24 +74,33 @@ class HelperSession(private val binary: Path, private val udid: String) {
         }
     }
 
-    private suspend fun exchange(channel: SocketChannel, onEvent: suspend (HelperEvent) -> Unit) {
+    private suspend fun exchange(
+        channel: SocketChannel,
+        attachBy: TimeMark,
+        onEvent: suspend (HelperEvent) -> Unit,
+    ) {
         coroutineScope {
             val writer = launch(Dispatchers.IO) {
                 for (message in outgoing) runInterruptible { channel.writeFully(message.encoded()) }
             }
             JpegDecoder().use { decoder ->
                 val reader = MessageReader(channel)
-                while (true) {
-                    val event = runInterruptible(Dispatchers.IO) { reader.nextEvent(decoder) } ?: break
+                suspend fun next() = runInterruptible(Dispatchers.IO) { reader.nextEvent(decoder) }
+                var event = try {
+                    withTimeout(-attachBy.elapsedNow()) { next() }
+                } catch (_: TimeoutCancellationException) {
+                    throw HelperTimeoutException(AttachTimeout)
+                }
+                while (event != null) {
                     onEvent(event)
+                    event = next()
                 }
             }
             writer.cancel()
         }
     }
 
-    private suspend fun connect(socket: Path, process: Process): SocketChannel {
-        val deadline = TimeSource.Monotonic.markNow() + ConnectTimeout
+    private suspend fun connect(socket: Path, process: Process, deadline: TimeMark): SocketChannel {
         while (true) {
             try {
                 return withContext(Dispatchers.IO) { SocketChannel.open(UnixDomainSocketAddress.of(socket)) }

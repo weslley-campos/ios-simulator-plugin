@@ -18,6 +18,7 @@ import java.awt.event.MouseEvent
 import java.awt.event.MouseWheelEvent
 import java.awt.image.BufferedImage
 import javax.swing.JPanel
+import javax.swing.JProgressBar
 import javax.swing.JScrollPane
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -150,6 +151,40 @@ class ScreenViewTest {
         view.mouse(MouseEvent.MOUSE_RELEASED, 250, 450)
 
         assertEquals(emptyList(), touches)
+    }
+
+    @Test
+    fun showsAProgressBarCenteredUnderABusyStatus() {
+        val view = view()
+
+        view.showStatus("Attaching to iPhone 18 Pro…", busy = true)
+        view.doLayout()
+
+        val progress = view.components.single() as JProgressBar
+        assertTrue(view.busy)
+        assertTrue(progress.isVisible && progress.isIndeterminate)
+        assertEquals(170, progress.x)
+        assertTrue(progress.y in 300..450, "the bar sits under the text, a third of the way down")
+    }
+
+    @Test
+    fun hidesTheProgressBarOnceTheScreenShows() {
+        val view = view()
+        view.showStatus("Attaching to iPhone 18 Pro…", busy = true)
+
+        view.show(frame(Color.RED))
+
+        assertFalse(view.busy)
+    }
+
+    @Test
+    fun showsNoProgressBarUnderAStatusThatWaits() {
+        val view = view()
+        view.showStatus("Attaching to iPhone 18 Pro…", busy = true)
+
+        view.showStatus("No simulator is booted", actions = listOf(StatusAction("Boot iPhone 18 Pro") {}))
+
+        assertFalse(view.busy)
     }
 
     @Test

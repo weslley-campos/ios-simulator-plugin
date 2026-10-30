@@ -1,6 +1,5 @@
 package br.com.weslleycampos.simpanel.ui
 
-import br.com.weslleycampos.simpanel.SimPanelBundle.message
 import br.com.weslleycampos.simpanel.keyboard.DeviceKeyboard
 import br.com.weslleycampos.simpanel.protocol.PluginMessage
 import br.com.weslleycampos.simpanel.protocol.TouchPhase
@@ -39,16 +38,28 @@ import java.awt.geom.AffineTransform
 import java.awt.geom.Point2D
 import java.awt.image.BufferedImage
 import javax.swing.JComponent
+import javax.swing.JProgressBar
 import javax.swing.JScrollPane
 import javax.swing.JViewport
 import javax.swing.Scrollable
 import javax.swing.SwingConstants
 import javax.swing.SwingUtilities
+import javax.swing.Timer
 import kotlin.math.ceil
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 private const val ScreenInset = 8
+
+/** The progress bar a busy status shows, below its text. */
+private const val ProgressWidth = 160
+private const val ProgressGap = 8
+
+/** The space between the links of a status. */
+private const val ActionGap = "      "
+
+private const val NanosPerSecond = 1_000_000_000L
+private const val FpsRepaintMillis = 1000
 
 /** Pixels a scroll bar's arrow scrolls a zoomed screen by. */
 private const val ScrollUnit = 16
@@ -121,6 +132,23 @@ class ScreenView : JComponent(), Scrollable {
     private val status = object : StatusText(this) {
         override fun isStatusVisible() = image == null
     }
+    private val progress = JProgressBar().apply {
+        isIndeterminate = true
+        isVisible = false
+    }
+
+    /** When each frame of the last second or so arrived, for [showFps]. */
+    private val frameTimes = ArrayDeque<Long>()
+    private val fpsRepaint = Timer(FpsRepaintMillis) { if (image != null) repaint() }
+
+    /** Paints how many frames arrived in the last second over the screen, for development. */
+    var showFps = false
+        set(value) {
+            field = value
+            if (value) fpsRepaint.start() else fpsRepaint.stop()
+            frameTimes.clear()
+            repaint()
+        }
 
     /** The space frames may fill, in pixels, so the helper sends them at the panel's resolution. */
     val viewport: PluginMessage.Viewport?
@@ -148,6 +176,7 @@ class ScreenView : JComponent(), Scrollable {
         isOpaque = true
         focusTraversalKeysEnabled = false
         background = JBColor.PanelBackground
+        add(progress)
         addComponentListener(object : ComponentAdapter() {
             override fun componentResized(e: ComponentEvent) {
                 viewport?.let(onViewport)
@@ -221,16 +250,21 @@ class ScreenView : JComponent(), Scrollable {
     fun show(frame: BufferedImage) {
         val first = image == null
         image = frame
+        if (showFps) frameTimes.addLast(System.nanoTime())
+        if (first) progress.isVisible = false
         repaint()
         if (first) onZoomChange()
     }
 
-    /** Replaces the screen with [text], an optional grey [detail] line and an optional [action] link. */
+    /**
+     * Replaces the screen with [text], an optional grey [detail] line and a line of [actions] links,
+     * over a progress bar while [busy].
+     */
     fun showStatus(
         text: String,
         detail: String? = null,
-        actionText: String = message("status.retry"),
-        action: (() -> Unit)? = null,
+        actions: List<StatusAction> = emptyList(),
+        busy: Boolean = false,
     ) {
         image = null
         touching = false
@@ -240,11 +274,27 @@ class ScreenView : JComponent(), Scrollable {
         status.clear()
         status.appendText(text)
         detail?.let { status.appendLine(it, SimpleTextAttributes.GRAYED_ATTRIBUTES, null) }
-        action?.let { run ->
-            status.appendLine(actionText, SimpleTextAttributes.LINK_PLAIN_ATTRIBUTES) { run() }
+        actions.forEachIndexed { index, action ->
+            if (index == 0) {
+                status.appendLine(action.text, SimpleTextAttributes.LINK_PLAIN_ATTRIBUTES) { action.run() }
+            } else {
+                status.appendText(ActionGap)
+                status.appendText(action.text, SimpleTextAttributes.LINK_PLAIN_ATTRIBUTES) { action.run() }
+            }
         }
+        progress.isVisible = busy
+        revalidate()
         repaint()
         onZoomChange()
+    }
+
+    /** Whether the status shows a progress bar. */
+    val busy: Boolean get() = progress.isVisible
+
+    override fun doLayout() {
+        val width = JBUI.scale(ProgressWidth)
+        val top = status.pointBelow.y + JBUI.scale(ProgressGap)
+        progress.setBounds((this.width - width) / 2, top, width, progress.preferredSize.height)
     }
 
     override fun getPreferredSize(): Dimension = zoomedSize() ?: super.getPreferredSize()
@@ -286,6 +336,17 @@ class ScreenView : JComponent(), Scrollable {
             }
         }
         status.paint(this, g)
+        if (showFps && frame != null) paintFps(g)
+    }
+
+    private fun paintFps(g: Graphics) {
+        val now = System.nanoTime()
+        while (frameTimes.isNotEmpty() && now - frameTimes.first() > NanosPerSecond) frameTimes.removeFirst()
+        val shown = visibleRect
+        val inset = JBUI.scale(ScreenInset)
+        g.font = JBUI.Fonts.smallFont()
+        g.color = JBColor.GRAY
+        g.drawString("${frameTimes.size} fps", shown.x + inset, shown.y + inset + g.fontMetrics.ascent)
     }
 
     private fun layoutChanged() {

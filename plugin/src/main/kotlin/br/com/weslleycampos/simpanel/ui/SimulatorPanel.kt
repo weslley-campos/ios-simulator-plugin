@@ -4,16 +4,21 @@ import br.com.weslleycampos.simpanel.SimPanelBundle.message
 import br.com.weslleycampos.simpanel.helper.HelperBinary
 import br.com.weslleycampos.simpanel.helper.HelperEvent
 import br.com.weslleycampos.simpanel.helper.HelperSession
+import br.com.weslleycampos.simpanel.helper.NextStep
+import br.com.weslleycampos.simpanel.helper.RestartPolicy
+import br.com.weslleycampos.simpanel.helper.SessionEnd
 import br.com.weslleycampos.simpanel.keyboard.Keystroke
 import br.com.weslleycampos.simpanel.protocol.DeviceButton
-import br.com.weslleycampos.simpanel.protocol.ErrorCode
 import br.com.weslleycampos.simpanel.protocol.HelperMessage
 import br.com.weslleycampos.simpanel.protocol.PluginMessage
+import br.com.weslleycampos.simpanel.simulators.BootWatch
+import br.com.weslleycampos.simpanel.simulators.DeviceHub
 import br.com.weslleycampos.simpanel.simulators.Devicectl
 import br.com.weslleycampos.simpanel.simulators.Orientation
 import br.com.weslleycampos.simpanel.simulators.Rotation
 import br.com.weslleycampos.simpanel.simulators.Simctl
 import br.com.weslleycampos.simpanel.simulators.Simulator
+import br.com.weslleycampos.simpanel.simulators.pickSimulator
 import br.com.weslleycampos.simpanel.simulators.screenshotFile
 import br.com.weslleycampos.simpanel.ui.actions.ControlAction
 import br.com.weslleycampos.simpanel.ui.actions.FrameToggleAction
@@ -28,6 +33,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.actionSystem.toolbarLayout.ToolbarLayoutStrategy
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.application.asContextElement
@@ -59,7 +65,11 @@ import java.time.LocalDateTime
 import javax.imageio.ImageIO
 import javax.swing.JComponent
 import javax.swing.JPanel
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 private const val LastUdidKey = "simpanel.lastUdid"
 private const val FrameVisibleKey = "simpanel.frameVisible"
@@ -70,6 +80,9 @@ private val ScreenshotDirectory = Path.of(System.getProperty("user.home"), "Desk
 
 /** How long the simulator takes to paste, so that keys typed after ⌘V land after the text. */
 private val PasteSettle = 400.milliseconds
+
+/** How often the panel lists the simulators while it waits for one to boot. */
+private val BootPoll = 2.seconds
 
 /**
  * The tool window's content: a device picker and the simulator's controls above the live screen
@@ -87,6 +100,11 @@ class SimulatorPanel(private val project: Project) :
     private var session: HelperSession? = null
     private var sessionJob: Job? = null
     private var openSimulator: Simulator? = null
+
+    /** Whether the panel shows the next simulator to boot, offering to boot [waitingFor]. */
+    private var waitingForBoot = false
+    private var waitingFor: Simulator? = null
+    private val openDeviceHub = StatusAction(message("status.openDeviceHub")) { openDeviceHub() }
 
     /** What was typed, in order, so that a paste's text lands before the keys typed after it. */
     private val typing = Channel<suspend () -> Unit>(Channel.UNLIMITED)
@@ -144,8 +162,10 @@ class SimulatorPanel(private val project: Project) :
         scope.launch {
             for (step in typing) step()
         }
+        scope.launch { watchForBoot() }
         screen.frameVisible = PropertiesComponent.getInstance().getBoolean(FrameVisibleKey, true)
-        screen.showStatus(message("status.loading"))
+        screen.showFps = ApplicationManager.getApplication().isInternal
+        screen.showStatus(message("status.loading"), busy = true)
         refresh()
     }
 
@@ -209,22 +229,16 @@ class SimulatorPanel(private val project: Project) :
         val simulator = openSimulator ?: return
         sessionJob?.cancel()
         sessionJob = scope.launch {
-            screen.showStatus(message("status.shuttingDown", simulator.name))
+            screen.showStatus(message("status.shuttingDown", simulator.name), busy = true)
             try {
                 withContext(Dispatchers.IO) { Simctl.shutdown(simulator.udid) }
                 service.opened.remove(simulator.udid)
-                screen.showStatus(
-                    message("status.shutDown", simulator.name),
-                    actionText = message("status.boot"),
-                    action = { open(simulator.copy(booted = false)) },
-                )
+                awaitBoot(simulator.copy(booted = false), message("status.shutDown", simulator.name))
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Log.warn(e)
-                val failed = message("status.shutDownFailed", simulator.name)
-                screen.showStatus(failed, e.message, action = { open(simulator) })
+                showFailed(message("status.shutDownFailed", simulator.name), e.message)
             }
-            refresh(openSelected = false)
         }
     }
 
@@ -262,64 +276,143 @@ class SimulatorPanel(private val project: Project) :
         FrameToggleAction(this),
     )
 
-    private fun refresh(openSelected: Boolean = true) {
+    /** Lists the simulators and shows one, unless the panel is already busy showing one. */
+    private fun refresh() {
         scope.launch {
             val simulators = try {
                 withContext(Dispatchers.IO) { Simctl.list() }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Log.warn(e)
-                screen.showStatus(message("status.listFailed"), e.message, action = ::refresh)
+                showFailed(message("status.listFailed"), e.message)
                 return@launch
             }
-            val keep = (devices.selectedItem as? Simulator)?.udid
-                ?: PropertiesComponent.getInstance().getValue(LastUdidKey)
-            val selected = simulators.firstOrNull { it.udid == keep } ?: simulators.firstOrNull { it.booted }
-            devices.model = CollectionComboBoxModel(simulators, selected)
-            if (!openSelected) return@launch
             when {
-                simulators.isEmpty() -> screen.showStatus(message("status.noSimulators"))
-                selected == null -> screen.showStatus(message("status.pick"))
-                else -> open(selected)
+                sessionJob?.isActive == true -> list(simulators, simulators.find { it.udid == openSimulator?.udid })
+                waitingForBoot -> keepWaiting(simulators, bootedBefore = null)
+                else -> show(simulators)
             }
         }
     }
 
-    private fun open(simulator: Simulator) {
+    /** Attaches to a simulator as soon as one boots, while the panel waits for one and is shown. */
+    private suspend fun watchForBoot() {
+        var bootedBefore: Set<String>? = null
+        while (true) {
+            delay(BootPoll)
+            if (!waitingForBoot || !isShowing) {
+                bootedBefore = null
+                continue
+            }
+            val simulators = try {
+                withContext(Dispatchers.IO) { Simctl.list() }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.debug(e)
+                continue
+            }
+            if (waitingForBoot) keepWaiting(simulators, bootedBefore)
+            bootedBefore = simulators.filter { it.booted }.mapTo(HashSet()) { it.udid }
+        }
+    }
+
+    /** Lists [simulators] and shows the one [pickSimulator] picks, or waits for it to boot. */
+    private fun show(simulators: List<Simulator>) {
+        val keep = (devices.selectedItem as? Simulator)?.udid
+            ?: PropertiesComponent.getInstance().getValue(LastUdidKey)
+        val pick = pickSimulator(simulators, keep)
+        list(simulators, pick)
+        if (pick?.booted == true) open(pick, boot = false) else awaitBoot(pick)
+    }
+
+    /** Lists [simulators] and takes the step [BootWatch] gives while the panel waits for one to boot. */
+    private fun keepWaiting(simulators: List<Simulator>, bootedBefore: Set<String>?) {
+        when (val step = BootWatch.after(simulators, waitingFor, bootedBefore)) {
+            is BootWatch.Show -> {
+                list(simulators, step.simulator)
+                open(step.simulator, boot = false)
+            }
+            is BootWatch.WaitFor -> {
+                list(simulators, step.simulator)
+                awaitBoot(step.simulator)
+            }
+            BootWatch.KeepWaiting -> list(simulators, simulators.find { it.udid == waitingFor?.udid })
+        }
+    }
+
+    /** Puts [simulators] in the picker with [selected] selected, without opening it. */
+    private fun list(simulators: List<Simulator>, selected: Simulator?) {
+        val listed = List(devices.itemCount, devices::getItemAt)
+        if (simulators != listed || selected != devices.selectedItem) {
+            devices.model = CollectionComboBoxModel(simulators, selected)
+        }
+    }
+
+    /**
+     * Opens [simulator], booting it first when [boot] allows, and keeps showing it. A simulator the
+     * user picks is booted; one the panel picks is already.
+     */
+    private fun open(simulator: Simulator, boot: Boolean = true) {
         if (simulator.udid == openSimulator?.udid && sessionJob?.isActive == true) return
         sessionJob?.cancel()
+        waitingForBoot = false
         openSimulator = simulator
         service.opened[simulator.udid] = simulator
         PropertiesComponent.getInstance().setValue(LastUdidKey, simulator.udid)
         sessionJob = scope.launch {
             try {
-                attach(simulator)
+                if (boot) {
+                    val text = if (simulator.booted) "status.attaching" else "status.booting"
+                    screen.showStatus(message(text, simulator.name), busy = true)
+                    withContext(Dispatchers.IO) { Simctl.boot(simulator.udid) }
+                    if (!simulator.booted) refresh()
+                }
+                keepShowing(simulator)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Log.warn(e)
-                screen.showStatus(message("status.failed", simulator.name), e.message, action = { open(simulator) })
+                showFailed(message("status.failed", simulator.name), e.message)
             }
         }
     }
 
-    private suspend fun attach(simulator: Simulator) {
-        if (!simulator.booted) {
-            screen.showStatus(message("status.booting", simulator.name))
-            withContext(Dispatchers.IO) { Simctl.boot(simulator.udid) }
-            refresh()
+    /** Shows [simulator] until a session ends for good, starting a new helper each time one may help. */
+    private suspend fun keepShowing(simulator: Simulator) {
+        val restarts = RestartPolicy()
+        screen.showStatus(message("status.attaching", simulator.name), busy = true)
+        while (true) {
+            val (end, shown) = attach(simulator)
+            when (val next = restarts.next(end, shown)) {
+                is NextStep.Restart -> {
+                    Log.info("Restarting the helper for ${simulator.name} in ${next.after} after $end")
+                    screen.showStatus(message("status.attaching", simulator.name), busy = true)
+                    delay(next.after)
+                }
+                NextStep.AwaitBoot ->
+                    return awaitBoot(simulator.copy(booted = false), message("status.shutDown", simulator.name))
+                NextStep.GiveUp -> return when (end) {
+                    is SessionEnd.Failed -> showFailed(end.failure.errorCode.text(), end.failure.message)
+                    is SessionEnd.Lost -> showFailed(message("status.stopped", simulator.name), end.cause?.message)
+                }
+            }
         }
-        screen.showStatus(message("status.attaching", simulator.name))
+    }
+
+    /** Runs one helper session for [simulator], returning how it ended and how long it showed the screen. */
+    private suspend fun attach(simulator: Simulator): Pair<SessionEnd, Duration> {
         screen.orientation = Orientation.Portrait
         val session = HelperSession(HelperBinary.path(), simulator.udid)
         this.session = session
         screen.viewport?.let(session::send)
         var failure: HelperMessage.Failure? = null
-        try {
+        var attachedAt: TimeMark? = null
+        val end = try {
             coroutineScope {
                 launch { showOrientation(simulator) }
                 session.run { event ->
                     when (event) {
                         is HelperEvent.Attached -> {
+                            attachedAt = TimeSource.Monotonic.markNow()
                             attached = true
                             screen.attach(Dimension(event.hello.width, event.hello.height))
                         }
@@ -329,20 +422,50 @@ class SimulatorPanel(private val project: Project) :
                     }
                 }
             }
+            failure?.let(SessionEnd::Failed) ?: SessionEnd.Lost(null)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.warn(e)
+            SessionEnd.Lost(e)
         } finally {
             if (this.session === session) {
                 this.session = null
                 attached = false
             }
         }
-        // The picker's list is a snapshot, so a simulator it shows booted may have shut down since.
-        if (failure?.errorCode == ErrorCode.DeviceNotBooted && simulator.booted) {
-            return attach(simulator.copy(booted = false))
-        }
-        val retry = { open(simulator) }
-        when (val reason = failure) {
-            null -> screen.showStatus(message("status.stopped", simulator.name), action = retry)
-            else -> screen.showStatus(reason.errorCode.text(), reason.message, action = retry)
+        return end to (attachedAt?.elapsedNow() ?: Duration.ZERO)
+    }
+
+    /**
+     * Shows [text] until a simulator boots, with a link that boots [simulator], or opens DeviceHub
+     * when there's none to boot.
+     */
+    private fun awaitBoot(simulator: Simulator?, text: String = message("status.notBooted")) {
+        waitingForBoot = true
+        waitingFor = simulator
+        val action = simulator?.let { StatusAction(message("status.boot", it.name)) { open(it) } }
+        screen.showStatus(
+            if (simulator == null) message("status.noSimulators") else text,
+            actions = listOf(action ?: openDeviceHub),
+        )
+    }
+
+    /** Shows why the panel can't show a simulator, with Retry and a way to fix it in DeviceHub. */
+    private fun showFailed(text: String, detail: String?) {
+        waitingForBoot = false
+        val retry = StatusAction(message("status.retry"), ::refresh)
+        screen.showStatus(text, detail, actions = listOf(retry, openDeviceHub))
+    }
+
+    private fun openDeviceHub() {
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) { DeviceHub.open() }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.warn(e)
+                SimPanelNotifications.failed(project, message("deviceHub.failed"), e.message)
+            }
         }
     }
 
