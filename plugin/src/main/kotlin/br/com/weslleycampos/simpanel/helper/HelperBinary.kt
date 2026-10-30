@@ -13,7 +13,11 @@ object HelperBinary {
         val plugin = checkNotNull(PluginManagerCore.getPlugin(PluginId.getId(SimPanelPluginId))) {
             "The $SimPanelPluginId plugin isn't loaded"
         }
-        val binary = plugin.pluginPath.resolve("bin/simpanel-helper")
+        return executable(plugin.pluginPath.resolve("bin/simpanel-helper"))
+    }
+
+    /** [binary], made executable if it isn't, as installing the plugin from a zip drops the bit. */
+    internal fun executable(binary: Path): Path {
         if (!Files.isExecutable(binary)) binary.toFile().setExecutable(true)
         return binary
     }
