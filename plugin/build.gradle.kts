@@ -55,6 +55,13 @@ tasks.withType<PrepareSandboxTask>().configureEach {
     from(buildHelper) {
         into(pluginName.map { "$it/bin" })
     }
+    // The sync deletes what it didn't copy: the plugins installed in the sandbox IDE, such as
+    // Kotlin Multiplatform, whose frameworks it breaks halfway before failing on their symlinks.
+    // Only this plugin and the frontend folder the task makes for split mode are its own.
+    preserve {
+        include("**")
+        exclude("${pluginName.get()}/**", "frontend/**")
+    }
 }
 
 tasks {
