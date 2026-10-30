@@ -66,6 +66,7 @@ class ZoomControls(private val screen: ScreenView, shortcutsTarget: JComponent) 
         }
         toolbar = ActionManager.getInstance().createActionToolbar(ZoomPlace, group, false)
         toolbar.targetComponent = shortcutsTarget
+        toolbar.layoutStrategy = CenteredColumnLayout
         toolbar.component.isOpaque = false
         toolbar.component.border = JBUI.Borders.empty()
         isOpaque = false
