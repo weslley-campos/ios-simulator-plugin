@@ -21,6 +21,7 @@ import com.intellij.openapi.actionSystem.ActionToolbar
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.Separator
+import com.intellij.openapi.actionSystem.toolbarLayout.ToolbarLayoutStrategy
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.application.asContextElement
@@ -94,12 +95,13 @@ class SimulatorPanel(private val project: Project) :
         val controls = ActionManager.getInstance()
             .createActionToolbar(ControlsPlace, controlActions(), true)
         controls.targetComponent = this
+        controls.layoutStrategy = ToolbarLayoutStrategy.WRAP_STRATEGY
         toolbars = listOf(actions, controls)
         toolbar = JPanel(BorderLayout()).apply {
             border = JBUI.Borders.empty(2, 4)
-            add(JPanel(BorderLayout()).apply {
-                add(devices, BorderLayout.WEST)
-                add(actions.component, BorderLayout.CENTER)
+            add(JPanel(PickerRowLayout(devices, actions.component)).apply {
+                add(devices)
+                add(actions.component)
             }, BorderLayout.NORTH)
             add(controls.component, BorderLayout.SOUTH)
         }
