@@ -140,7 +140,7 @@ steps += swipe(from: CGPoint(x: 0.5, y: 0.3), to: CGPoint(x: 0.5, y: 0.7), at: 1
 
 let liveStart = DispatchTime.now().uptimeNanoseconds
 var lastSeed = first.seed
-var lastSurface = ObjectIdentifier(first)
+var lastSurface = IOSurfaceGetID(first)
 var changes: [Double] = []
 var encodeTimes: [Double] = []
 var saved = 0
@@ -157,9 +157,9 @@ while milliseconds(since: liveStart) < 3000 {
         steps.removeFirst()
     }
     if let surface = simulator.framebuffer,
-       surface.seed != lastSeed || ObjectIdentifier(surface) != lastSurface {
+       surface.seed != lastSeed || IOSurfaceGetID(surface) != lastSurface {
         lastSeed = surface.seed
-        lastSurface = ObjectIdentifier(surface)
+        lastSurface = IOSurfaceGetID(surface)
         changes.append(now)
         let start = DispatchTime.now().uptimeNanoseconds
         let jpeg = encoder.jpeg(surface, scale: 0.5, quality: 0.7)

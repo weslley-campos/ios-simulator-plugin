@@ -41,7 +41,7 @@ Results on 2026-10-29 with Xcode 27.1 (27A9275) and an iPhone 18 Pro on iOS 27.0
 | Framebuffer | IOSurface, 1206 x 2622, BGRA |
 | JPEG at full size | 4 to 7 ms a frame |
 | JPEG at half size | 2 to 3 ms a frame |
-| Frames drawn while scrolling | about 190 a second, polled every millisecond |
+| Frames drawn while scrolling | 41 to 57 a second, polled every millisecond |
 | Taps and swipes | Land through `SimDeviceLegacyHIDClient` |
 | macOS permission prompts | None |
 
