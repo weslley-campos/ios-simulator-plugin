@@ -1,5 +1,6 @@
 package br.com.weslleycampos.simpanel.screen
 
+import br.com.weslleycampos.simpanel.simulators.Orientation
 import java.awt.Dimension
 import java.awt.Point
 import java.awt.Rectangle
@@ -52,5 +53,30 @@ class ScreenGeometryTest {
 
         assertEquals(Point2D.Double(0.0, 1.0), fractionOn(screen, Point(40, 900)))
         assertEquals(Point2D.Double(1.0, 0.0), fractionOn(screen, Point(600, -20)))
+    }
+
+    @Test
+    fun turnsTheAreaUprightWhenTheSimulatorIsHeldSideways() {
+        val area = Rectangle(8, 8, 900, 500)
+
+        assertEquals(Rectangle(0, 0, 900, 500), upright(area, Orientation.Portrait))
+        assertEquals(Rectangle(0, 0, 900, 500), upright(area, Orientation.PortraitUpsideDown))
+        assertEquals(Rectangle(0, 0, 500, 900), upright(area, Orientation.LandscapeLeft))
+        assertEquals(Rectangle(0, 0, 500, 900), upright(area, Orientation.LandscapeRight))
+    }
+
+    @Test
+    fun turnsTheUprightScreenOntoTheArea() {
+        val area = Rectangle(8, 8, 900, 500)
+        fun turned(orientation: Orientation, x: Int, y: Int) =
+            turnOnto(area, orientation).transform(Point(x, y), null)
+
+        assertEquals(Point(8, 8), turned(Orientation.Portrait, 0, 0))
+        assertEquals(Point(8, 508), turned(Orientation.LandscapeLeft, 0, 0))
+        assertEquals(Point(8, 8), turned(Orientation.LandscapeLeft, 500, 0))
+        assertEquals(Point(908, 508), turned(Orientation.LandscapeLeft, 0, 900))
+        assertEquals(Point(908, 8), turned(Orientation.LandscapeRight, 0, 0))
+        assertEquals(Point(8, 8), turned(Orientation.LandscapeRight, 0, 900))
+        assertEquals(Point(908, 508), turned(Orientation.PortraitUpsideDown, 0, 0))
     }
 }

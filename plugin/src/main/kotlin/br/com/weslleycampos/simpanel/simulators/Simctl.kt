@@ -1,7 +1,6 @@
 package br.com.weslleycampos.simpanel.simulators
 
 import com.intellij.execution.configurations.GeneralCommandLine
-import com.intellij.execution.process.CapturingProcessHandler
 import java.nio.file.Path
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
@@ -42,14 +41,6 @@ object Simctl {
         run(PasteTimeout, "pbcopy", udid, input = text)
     }
 
-    private fun run(timeout: Duration, vararg arguments: String, input: String? = null): String {
-        val command = GeneralCommandLine("xcrun", "simctl", *arguments)
-        val handler = CapturingProcessHandler(command)
-        input?.let { text -> handler.processInput.use { it.write(text.encodeToByteArray()) } }
-        val output = handler.runProcess(timeout.inWholeMilliseconds.toInt())
-        if (output.isTimeout || output.exitCode != 0) {
-            throw SimctlException(command.commandLineString, output.stderr.ifBlank { output.stdout })
-        }
-        return output.stdout
-    }
+    private fun run(timeout: Duration, vararg arguments: String, input: String? = null): String =
+        xcrun(timeout, "simctl", *arguments, input = input)
 }

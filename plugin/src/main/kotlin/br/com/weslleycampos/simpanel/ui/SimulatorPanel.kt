@@ -9,6 +9,9 @@ import br.com.weslleycampos.simpanel.protocol.DeviceButton
 import br.com.weslleycampos.simpanel.protocol.ErrorCode
 import br.com.weslleycampos.simpanel.protocol.HelperMessage
 import br.com.weslleycampos.simpanel.protocol.PluginMessage
+import br.com.weslleycampos.simpanel.simulators.Devicectl
+import br.com.weslleycampos.simpanel.simulators.Orientation
+import br.com.weslleycampos.simpanel.simulators.Rotation
 import br.com.weslleycampos.simpanel.simulators.Simctl
 import br.com.weslleycampos.simpanel.simulators.Simulator
 import br.com.weslleycampos.simpanel.simulators.screenshotFile
@@ -43,6 +46,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -157,6 +161,20 @@ class SimulatorPanel(private val project: Project) :
         }
     }
 
+    override fun rotate(rotation: Rotation) {
+        val simulator = openSimulator ?: return
+        scope.launch {
+            try {
+                val orientation = withContext(Dispatchers.IO) { Devicectl.rotate(simulator.udid, rotation) }
+                if (openSimulator?.udid == simulator.udid) screen.orientation = orientation
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.warn(e)
+                SimPanelNotifications.failed(project, message("rotate.failed"), e.message)
+            }
+        }
+    }
+
     override fun takeScreenshot() {
         val simulator = openSimulator ?: return
         scope.launch {
@@ -230,6 +248,8 @@ class SimulatorPanel(private val project: Project) :
         ControlAction(message("action.power"), ControlIcons.Power, this) { press(DeviceButton.Power) },
         ControlAction(message("action.volumeUp"), ControlIcons.VolumeUp, this) { press(DeviceButton.VolumeUp) },
         ControlAction(message("action.volumeDown"), ControlIcons.VolumeDown, this) { press(DeviceButton.VolumeDown) },
+        ControlAction(message("action.rotateLeft"), ControlIcons.RotateLeft, this) { rotate(Rotation.Left) },
+        ControlAction(message("action.rotateRight"), ControlIcons.RotateRight, this) { rotate(Rotation.Right) },
         Separator.create(),
         ControlAction(message("action.home"), ControlIcons.Home, this) { press(DeviceButton.Home) },
         ControlAction(message("action.appSwitcher"), ControlIcons.AppSwitcher, this) {
@@ -289,20 +309,24 @@ class SimulatorPanel(private val project: Project) :
             refresh()
         }
         screen.showStatus(message("status.attaching", simulator.name))
+        screen.orientation = Orientation.Portrait
         val session = HelperSession(HelperBinary.path(), simulator.udid)
         this.session = session
         screen.viewport?.let(session::send)
         var failure: HelperMessage.Failure? = null
         try {
-            session.run { event ->
-                when (event) {
-                    is HelperEvent.Attached -> {
-                        attached = true
-                        screen.attach(Dimension(event.hello.width, event.hello.height))
+            coroutineScope {
+                launch { showOrientation(simulator) }
+                session.run { event ->
+                    when (event) {
+                        is HelperEvent.Attached -> {
+                            attached = true
+                            screen.attach(Dimension(event.hello.width, event.hello.height))
+                        }
+                        is HelperEvent.FrameReady -> screen.show(event.image)
+                        is HelperEvent.DeviceFrameReady -> screen.showDeviceFrame(event.frame)
+                        is HelperEvent.Failed -> failure = event.failure
                     }
-                    is HelperEvent.FrameReady -> screen.show(event.image)
-                    is HelperEvent.DeviceFrameReady -> screen.showDeviceFrame(event.frame)
-                    is HelperEvent.Failed -> failure = event.failure
                 }
             }
         } finally {
@@ -319,6 +343,16 @@ class SimulatorPanel(private val project: Project) :
         when (val reason = failure) {
             null -> screen.showStatus(message("status.stopped", simulator.name), action = retry)
             else -> screen.showStatus(reason.errorCode.text(), reason.message, action = retry)
+        }
+    }
+
+    /** Turns the screen the way the simulator is held, which it keeps from before the panel showed it. */
+    private suspend fun showOrientation(simulator: Simulator) {
+        try {
+            screen.orientation = withContext(Dispatchers.IO) { Devicectl.orientation(simulator.udid) }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.warn(e)
         }
     }
 }

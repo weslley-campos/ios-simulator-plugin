@@ -7,6 +7,7 @@ import br.com.weslleycampos.simpanel.protocol.PluginMessage
 import br.com.weslleycampos.simpanel.protocol.TouchPhase
 import br.com.weslleycampos.simpanel.screen.Zoom
 import br.com.weslleycampos.simpanel.screen.proMaxFrame
+import br.com.weslleycampos.simpanel.simulators.Orientation
 import java.awt.Color
 import java.awt.Component
 import java.awt.Dimension
@@ -299,5 +300,82 @@ class ScreenViewTest {
 
         assertTrue(scrollPane.viewport.viewPosition.y > 0, "the scroll pane scrolled")
         assertEquals(emptyList(), scrolls)
+    }
+
+    /** A screen held with its top to the left, in a panel as wide as [view]'s is tall. */
+    private fun turnedLeft(): ScreenView = ScreenView().apply {
+        setSize(900, 500)
+        attach(Dimension(1206, 2622))
+        orientation = Orientation.LandscapeLeft
+    }
+
+    /** A frame red at its top and blue at its bottom. */
+    private fun splitFrame() = BufferedImage(400, 870, BufferedImage.TYPE_INT_RGB).apply {
+        createGraphics().run {
+            color = Color.RED
+            fillRect(0, 0, 400, 435)
+            color = Color.BLUE
+            fillRect(0, 435, 400, 435)
+            dispose()
+        }
+    }
+
+    @Test
+    fun paintsTheScreenTurnedTheWayTheSimulatorIsHeld() {
+        val view = turnedLeft()
+        view.show(splitFrame())
+
+        val rendered = view.rendered()
+
+        assertEquals(Color.RED.rgb, rendered.getRGB(150, 250))
+        assertEquals(Color.BLUE.rgb, rendered.getRGB(750, 250))
+        assertTrue(rendered.getRGB(450, 20) != Color.RED.rgb, "the screen's long side runs across the panel")
+    }
+
+    @Test
+    fun asksForUprightFramesWhileTheSimulatorIsHeldSideways() {
+        val view = turnedLeft()
+
+        assertEquals(PluginMessage.Viewport(407, 884), view.viewport)
+    }
+
+    @Test
+    fun touchesTheUprightScreenWhereTheTurnedOneIsClicked() {
+        val view = turnedLeft()
+        val touches = mutableListOf<PluginMessage.Touch>()
+        view.onTouch = { touches += it }
+        view.show(splitFrame())
+
+        view.mouse(MouseEvent.MOUSE_PRESSED, 100, 250)
+        view.mouse(MouseEvent.MOUSE_DRAGGED, 450, 100)
+        view.mouse(MouseEvent.MOUSE_RELEASED, 450, 100)
+
+        assertEquals(0.5, touches[0].x, 0.01)
+        assertEquals(92.0 / 884, touches[0].y, 0.01)
+        assertEquals(0.87, touches[1].x, 0.01)
+        assertEquals(0.5, touches[1].y, 0.01)
+    }
+
+    @Test
+    fun scrollsTheUprightScreenAlongTheWayTheWheelTurnsOnTheTurnedOne() {
+        val view = turnedLeft()
+        val scrolls = mutableListOf<PluginMessage.Scroll>()
+        view.onScroll = { scrolls += it }
+        view.show(splitFrame())
+
+        view.wheel(450, 250, rotation = 2.5)
+
+        assertEquals(-25.0 / 407, scrolls[0].dx, 0.001)
+        assertEquals(0.0, scrolls[0].dy, 0.001)
+    }
+
+    @Test
+    fun takesTheTurnedSizeWhenZoomed() {
+        val (view, _) = scrolled()
+        view.orientation = Orientation.LandscapeLeft
+
+        view.zoom = Zoom.ActualSize
+
+        assertEquals(Dimension(2638, 1222), view.preferredSize)
     }
 }

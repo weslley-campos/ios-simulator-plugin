@@ -1,6 +1,7 @@
 package br.com.weslleycampos.simpanel.ui.actions
 
 import br.com.weslleycampos.simpanel.protocol.DeviceButton
+import br.com.weslleycampos.simpanel.simulators.Rotation
 
 /** What the toolbar's actions do to the simulator the panel shows. */
 interface SimulatorControls {
@@ -9,6 +10,9 @@ interface SimulatorControls {
 
     /** Presses and releases each of [buttons] in turn, so two Home presses open the app switcher. */
     fun press(vararg buttons: DeviceButton)
+
+    /** Turns the simulator a quarter turn, and the screen with it. */
+    fun rotate(rotation: Rotation)
 
     /** Saves a screenshot where Simulator saves them and copies it to the clipboard. */
     fun takeScreenshot()

@@ -7,6 +7,8 @@ object ControlIcons {
     val Power = icon("power")
     val VolumeUp = icon("volume-up")
     val VolumeDown = icon("volume-down")
+    val RotateLeft = icon("rotate-left")
+    val RotateRight = icon("rotate-right")
     val Home = icon("home")
     val AppSwitcher = icon("overview")
     val Screenshot = icon("screenshot")

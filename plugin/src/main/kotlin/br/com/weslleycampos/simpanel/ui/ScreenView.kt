@@ -13,6 +13,9 @@ import br.com.weslleycampos.simpanel.screen.ZoomLevels
 import br.com.weslleycampos.simpanel.screen.fractionOn
 import br.com.weslleycampos.simpanel.screen.placeFrame
 import br.com.weslleycampos.simpanel.screen.placeScreen
+import br.com.weslleycampos.simpanel.screen.turnOnto
+import br.com.weslleycampos.simpanel.screen.upright
+import br.com.weslleycampos.simpanel.simulators.Orientation
 import com.intellij.ui.JBColor
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.util.ui.JBUI
@@ -32,6 +35,7 @@ import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.awt.event.MouseWheelEvent
+import java.awt.geom.AffineTransform
 import java.awt.geom.Point2D
 import java.awt.image.BufferedImage
 import javax.swing.JComponent
@@ -41,6 +45,7 @@ import javax.swing.Scrollable
 import javax.swing.SwingConstants
 import javax.swing.SwingUtilities
 import kotlin.math.ceil
+import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 private const val ScreenInset = 8
@@ -52,9 +57,11 @@ private const val ScrollUnit = 16
 private const val WheelUnit = 10.0
 
 /**
- * Paints the simulator's latest frame, fitted to the panel or at a fixed [zoom] in a scroll pane, and
- * dressed in the device when the helper sent one. It turns the mouse into touches, scrolls and button
- * presses, and the keyboard, while it has focus, into the simulator's.
+ * Paints the simulator's latest frame, fitted to the panel or at a fixed [zoom] in a scroll pane, turned
+ * the way the simulator is held and dressed in the device when the helper sent one. It turns the mouse
+ * into touches, scrolls and button presses, and the keyboard, while it has focus, into the simulator's.
+ * The screen and the device are placed upright, as the frames and the touches see them, and turned
+ * onto the component when painted.
  */
 class ScreenView : JComponent(), Scrollable {
     var onTouch: (PluginMessage.Touch) -> Unit = {}
@@ -92,6 +99,15 @@ class ScreenView : JComponent(), Scrollable {
             layoutChanged()
         }
 
+    /** Which way up the simulator is held; the screen and the device around it turn with it. */
+    var orientation = Orientation.Portrait
+        set(value) {
+            if (field == value) return
+            field = value
+            revalidate()
+            layoutChanged()
+        }
+
     private var device: Dimension? = null
     private var deviceFrame: DeviceFrame? = null
     private var image: BufferedImage? = null
@@ -109,7 +125,7 @@ class ScreenView : JComponent(), Scrollable {
     /** The space frames may fill, in pixels, so the helper sends them at the panel's resolution. */
     val viewport: PluginMessage.Viewport?
         get() {
-            val area = (screen() ?: area()).takeUnless { it.isEmpty } ?: return null
+            val area = (screen() ?: upright(area(), orientation)).takeUnless { it.isEmpty } ?: return null
             val scale = pixelScale()
             return PluginMessage.Viewport(
                 width = (area.width * scale).roundToInt(),
@@ -144,19 +160,20 @@ class ScreenView : JComponent(), Scrollable {
                 requestFocusInWindow()
                 val screen = screen() ?: return
                 if (image == null) return
-                if (screen.contains(e.point)) {
+                val point = upright(e.point)
+                if (screen.contains(point)) {
                     touching = true
-                    touch(TouchPhase.Down, screen, e.point)
+                    touch(TouchPhase.Down, screen, point)
                     return
                 }
-                val button = placedFrame()?.buttonAt(e.point) ?: return
+                val button = placedFrame()?.buttonAt(point) ?: return
                 pressed = button
                 onButton(PluginMessage.Button(button.button, down = true))
                 repaint()
             }
 
             override fun mouseDragged(e: MouseEvent) {
-                if (touching) screen()?.let { touch(TouchPhase.Move, it, e.point) }
+                if (touching) screen()?.let { touch(TouchPhase.Move, it, upright(e.point)) }
             }
 
             override fun mouseReleased(e: MouseEvent) {
@@ -168,11 +185,11 @@ class ScreenView : JComponent(), Scrollable {
                 }
                 if (!touching) return
                 touching = false
-                screen()?.let { touch(TouchPhase.Up, it, e.point) }
+                screen()?.let { touch(TouchPhase.Up, it, upright(e.point)) }
             }
 
             override fun mouseMoved(e: MouseEvent) {
-                val overButton = image != null && placedFrame()?.buttonAt(e.point) != null
+                val overButton = image != null && placedFrame()?.buttonAt(upright(e.point)) != null
                 cursor = Cursor.getPredefinedCursor(if (overButton) Cursor.HAND_CURSOR else Cursor.DEFAULT_CURSOR)
             }
         }
@@ -252,6 +269,7 @@ class ScreenView : JComponent(), Scrollable {
         if (frame != null && screen != null) {
             val g2 = g.create() as Graphics2D
             try {
+                g2.transform(turn())
                 g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
                 val placed = placedFrame()
                 placed?.let { g2.drawButtons(it, onTop = false) }
@@ -317,31 +335,41 @@ class ScreenView : JComponent(), Scrollable {
     private fun frameScale(frame: DeviceFrame, device: Dimension, screenScale: Double) =
         screenScale * device.width / frame.screen.width
 
+    /** The device, upright, placed to show in [area] at [scale]. */
     private fun placedFrame(area: Rectangle = area(), scale: Double? = screenScale()): PlacedFrame? {
         val frame = visibleFrame() ?: return null
         val device = device ?: return null
-        return placeFrame(area, frame, scale?.let { frameScale(frame, device, it) })
+        return placeFrame(upright(area, orientation), frame, scale?.let { frameScale(frame, device, it) })
     }
 
+    /** The screen, upright, placed to show in [area] at [scale]. */
     private fun screen(area: Rectangle = area(), scale: Double? = screenScale()): Rectangle? {
-        val placed = placedFrame(area, scale)?.screen ?: device?.let { placeScreen(area, it, scale) }
+        val upright = upright(area, orientation)
+        val placed = placedFrame(area, scale)?.screen ?: device?.let { placeScreen(upright, it, scale) }
         return placed?.takeUnless { it.isEmpty }
     }
+
+    /** Turns the upright screen and device onto the component. */
+    private fun turn(): AffineTransform = turnOnto(area(), orientation)
+
+    /** Where [point] on the component falls on the upright screen and device. */
+    private fun upright(point: Point): Point2D = turn().inverseTransform(point, null)
 
     /** The size the screen, its device and the inset take at a fixed zoom, or null when they fit the panel. */
     private fun zoomedSize(): Dimension? {
         val scale = screenScale() ?: return null
         val device = device ?: return null
         val frame = visibleFrame()
-        val (width, height) = when (frame) {
+        val (uprightWidth, uprightHeight) = when (frame) {
             null -> device.width * scale to device.height * scale
             else -> frameScale(frame, device, scale).let { frame.width * it to frame.height * it }
         }
+        val (width, height) = if (orientation.sideways) uprightHeight to uprightWidth else uprightWidth to uprightHeight
         val inset = 2 * JBUI.scale(ScreenInset)
         return Dimension(ceil(width).toInt() + inset, ceil(height).toInt() + inset)
     }
 
-    private fun touch(phase: TouchPhase, screen: Rectangle, point: Point) {
+    private fun touch(phase: TouchPhase, screen: Rectangle, point: Point2D) {
         val fraction = fractionOn(screen, point)
         onTouch(PluginMessage.Touch(phase, fraction.x, fraction.y))
     }
@@ -352,21 +380,18 @@ class ScreenView : JComponent(), Scrollable {
      */
     private fun scroll(e: MouseWheelEvent) {
         if (touching) return
-        val screen = screen()?.takeIf { image != null && it.contains(e.point) }
+        val upright = upright(e.point)
+        val screen = screen()?.takeIf { image != null && it.contains(upright) }
         if (screen == null) {
             val scrollPane = SwingUtilities.getAncestorOfClass(JScrollPane::class.java, this) ?: return
             scrollPane.dispatchEvent(SwingUtilities.convertMouseEvent(this, e, scrollPane))
             return
         }
-        val point = fractionOn(screen, e.point)
+        val point = fractionOn(screen, upright)
         val distance = e.preciseWheelRotation * WheelUnit
-        onScroll(
-            if (e.isShiftDown) {
-                PluginMessage.Scroll(point.x, point.y, dx = distance / screen.width, dy = 0.0)
-            } else {
-                PluginMessage.Scroll(point.x, point.y, dx = 0.0, dy = distance / screen.height)
-            },
-        )
+        val shown = if (e.isShiftDown) Point2D.Double(distance, 0.0) else Point2D.Double(0.0, distance)
+        val delta = turn().createInverse().deltaTransform(shown, null)
+        onScroll(PluginMessage.Scroll(point.x, point.y, dx = delta.x / screen.width, dy = delta.y / screen.height))
     }
 
     private fun Graphics2D.drawButtons(placed: PlacedFrame, onTop: Boolean) {
@@ -377,7 +402,7 @@ class ScreenView : JComponent(), Scrollable {
 
     /** Draws [image] into [bounds] from a copy at the pixel size it lands at, so it stays smooth. */
     private fun Graphics2D.drawScaled(image: ScaledImage, bounds: Rectangle) {
-        val scale = transform.scaleX
+        val scale = hypot(transform.scaleX, transform.shearY)
         val pixels = image.at((bounds.width * scale).roundToInt(), (bounds.height * scale).roundToInt())
         drawImage(pixels, bounds.x, bounds.y, bounds.width, bounds.height, null)
     }

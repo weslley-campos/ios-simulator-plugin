@@ -1,8 +1,8 @@
 package br.com.weslleycampos.simpanel.screen
 
-import java.awt.Point
 import java.awt.Rectangle
 import java.awt.Shape
+import java.awt.geom.Point2D
 import java.awt.geom.Rectangle2D
 import java.awt.geom.RoundRectangle2D
 import kotlin.math.min
@@ -20,7 +20,7 @@ class PlacedFrame(
     val screenClip: Shape,
     val buttons: Map<FrameButton, Rectangle>,
 ) {
-    fun buttonAt(point: Point): FrameButton? = buttons.entries.firstOrNull { it.value.contains(point) }?.key
+    fun buttonAt(point: Point2D): FrameButton? = buttons.entries.firstOrNull { it.value.contains(point) }?.key
 }
 
 /**
