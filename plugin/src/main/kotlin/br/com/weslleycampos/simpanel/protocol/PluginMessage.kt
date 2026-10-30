@@ -44,4 +44,11 @@ sealed interface PluginMessage {
         override fun encoded() =
             Framing.encode(MessageType.Button, SimPanelJson.encodeToString(this).encodeToByteArray())
     }
+
+    /** How often the helper sends a frame, at most, and the JPEG quality it encodes them at, from 0 to 1. */
+    @Serializable
+    data class Settings(val maxFps: Int, val jpegQuality: Double) : PluginMessage {
+        override fun encoded() =
+            Framing.encode(MessageType.Settings, SimPanelJson.encodeToString(this).encodeToByteArray())
+    }
 }

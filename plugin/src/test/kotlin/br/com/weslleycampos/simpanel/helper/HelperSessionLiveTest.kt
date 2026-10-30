@@ -24,10 +24,12 @@ private const val SettingsBundle = "com.apple.Preferences"
 class HelperSessionLiveTest {
     private val udid = System.getenv("SIMPANEL_UDID")
 
+    private val helper = Path.of(System.getProperty("simpanel.helper"))
+
     @Test
-    fun streamsDecodedFramesWhileASwipeScrolls() = runBlocking {
+    fun streamsDecodedFramesWhileASwipeScrolls(): Unit = runBlocking {
         openSettings()
-        val session = HelperSession(Path.of(System.getProperty("simpanel.helper")), udid)
+        val session = HelperSession(helper, udid)
         val start = System.nanoTime()
         val events = mutableListOf<Pair<Double, HelperEvent>>()
         session.send(PluginMessage.Viewport(400, 870))
@@ -35,12 +37,7 @@ class HelperSessionLiveTest {
 
         delay(1.seconds)
         val swipeStart = (System.nanoTime() - start) / 1e9
-        session.send(PluginMessage.Touch(TouchPhase.Down, 0.5, 0.75))
-        for (step in 1..24) {
-            delay(17.milliseconds)
-            session.send(PluginMessage.Touch(TouchPhase.Move, 0.5, 0.75 - 0.45 * step / 24))
-        }
-        session.send(PluginMessage.Touch(TouchPhase.Up, 0.5, 0.3))
+        session.swipe()
         delay(1500.milliseconds)
         running.cancelAndJoin()
 
@@ -57,6 +54,41 @@ class HelperSessionLiveTest {
         )
         assertTrue(image.height <= 870 && image.width <= 400, "frames fit the viewport")
         assertTrue(fps >= 25, "decoded frames keep up with the helper while scrolling")
+    }
+
+    @Test
+    fun capsTheFrameRateAtTheSettingsMaxFps(): Unit = runBlocking {
+        openSettings()
+        val session = HelperSession(helper, udid)
+        val start = System.nanoTime()
+        val frames = mutableListOf<Double>()
+        session.send(PluginMessage.Viewport(400, 870))
+        session.send(PluginMessage.Settings(maxFps = 5, jpegQuality = 0.5))
+        val running = launch {
+            session.run { if (it is HelperEvent.FrameReady) frames += (System.nanoTime() - start) / 1e9 }
+        }
+
+        delay(1.seconds)
+        val swipeStart = (System.nanoTime() - start) / 1e9
+        session.swipe()
+        delay(1500.milliseconds)
+        running.cancelAndJoin()
+
+        val scrolling = frames.filter { it >= swipeStart }
+        assertTrue(scrolling.size >= 2, "the swipe scrolled the screen")
+        val fps = (scrolling.size - 1) / (scrolling.last() - scrolling.first())
+        println("%.1f fps while scrolling at maxFps 5".format(fps))
+        assertTrue(fps <= 6, "the helper sends no more frames than maxFps allows")
+    }
+
+    /** Swipes up across the middle of the screen in 24 moves, about one a frame. */
+    private suspend fun HelperSession.swipe() {
+        send(PluginMessage.Touch(TouchPhase.Down, 0.5, 0.75))
+        for (step in 1..24) {
+            delay(17.milliseconds)
+            send(PluginMessage.Touch(TouchPhase.Move, 0.5, 0.75 - 0.45 * step / 24))
+        }
+        send(PluginMessage.Touch(TouchPhase.Up, 0.5, 0.3))
     }
 
     private fun openSettings() {

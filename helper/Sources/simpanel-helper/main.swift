@@ -96,11 +96,18 @@ do {
 let streamer = FrameStreamer(
     simulator: simulator,
     connection: connection,
-    verbose: CommandLine.arguments.contains("--verbose")
-) {
-    log("plugin stopped reading")
-    finish(0)
-}
+    verbose: CommandLine.arguments.contains("--verbose"),
+    onClosed: {
+        log("plugin stopped reading")
+        finish(0)
+    },
+    onShutDown: {
+        let failure = HelperError(code: .deviceNotBooted, message: "\(simulator.name) shut down")
+        log("\(failure.code.rawValue): \(failure.message)")
+        try? connection.write(HelperMessage.error(failure).encoded())
+        finish(0)
+    }
+)
 streamer.start()
 let scroller = Scroller(simulator: simulator)
 
@@ -117,6 +124,8 @@ func handle(_ message: PluginMessage) {
         simulator.key(key.usage, down: key.down)
     case .button(let press):
         press.button.send(down: press.down, to: simulator)
+    case .settings(let settings):
+        streamer.apply(settings)
     }
 }
 

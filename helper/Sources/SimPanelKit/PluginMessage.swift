@@ -77,6 +77,24 @@ public enum DeviceButton: String, Codable, Sendable {
     case siri
 }
 
+/// How often the helper sends a frame, at most, and the JPEG quality it encodes them at, from 0 to 1.
+public struct StreamSettings: Codable, Equatable, Sendable {
+    public static let standard = StreamSettings(maxFps: 30, jpegQuality: 0.7)
+
+    public let maxFps: Int
+    public let jpegQuality: Double
+
+    public init(maxFps: Int, jpegQuality: Double) {
+        self.maxFps = maxFps
+        self.jpegQuality = jpegQuality
+    }
+
+    /// The settings brought within what the helper streams: 1 to 60 frames a second, quality 0.1 to 1.
+    public var clamped: StreamSettings {
+        StreamSettings(maxFps: min(max(maxFps, 1), 60), jpegQuality: min(max(jpegQuality, 0.1), 1))
+    }
+}
+
 /// What the plugin sends the helper.
 public enum PluginMessage: Equatable, Sendable {
     case viewport(Viewport)
@@ -84,6 +102,7 @@ public enum PluginMessage: Equatable, Sendable {
     case scroll(Scroll)
     case key(Key)
     case button(ButtonPress)
+    case settings(StreamSettings)
 
     public func encoded() throws -> Data {
         switch self {
@@ -100,6 +119,8 @@ public enum PluginMessage: Equatable, Sendable {
             Framing.encode(type: MessageType.key.rawValue, payload: try JSONEncoder().encode(key))
         case .button(let press):
             Framing.encode(type: MessageType.button.rawValue, payload: try JSONEncoder().encode(press))
+        case .settings(let settings):
+            Framing.encode(type: MessageType.settings.rawValue, payload: try JSONEncoder().encode(settings))
         }
     }
 
@@ -111,6 +132,7 @@ public enum PluginMessage: Equatable, Sendable {
         case .scroll: .scroll(try JSONDecoder().decode(Scroll.self, from: payload))
         case .key: .key(try JSONDecoder().decode(Key.self, from: payload))
         case .button: .button(try JSONDecoder().decode(ButtonPress.self, from: payload))
+        case .settings: .settings(try JSONDecoder().decode(StreamSettings.self, from: payload))
         default: nil
         }
     }

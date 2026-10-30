@@ -174,6 +174,10 @@ static NSError *SPMakeError(SPError code, NSString *message) {
     return self;
 }
 
+- (BOOL)isBooted {
+    return [[self.device valueForKey:@"state"] unsignedLongLongValue] == SimDeviceStateBooted;
+}
+
 + (nullable id<SPDisplayDescriptor>)mainDisplayOfDevice:(id)device {
     NSArray<id<SPIOPort>> *ports = [[device valueForKey:@"io"] valueForKey:@"ioPorts"];
     for (id<SPIOPort> port in ports) {

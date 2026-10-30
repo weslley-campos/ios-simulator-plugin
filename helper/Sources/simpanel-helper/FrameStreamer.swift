@@ -2,10 +2,10 @@ import Foundation
 import SimBridge
 import SimPanelKit
 
-private let MaxFps = 30
-private let JPEGQuality = 0.7
+private let BootCheckInterval = DispatchTimeInterval.seconds(1)
 
-/// Sends a frame whenever the framebuffer changed, at most `MaxFps` a second.
+/// Sends a frame whenever the framebuffer changed, at most as often as the settings allow, and
+/// stops once the simulator shuts down.
 final class FrameStreamer: @unchecked Sendable {
     private struct FrameKey: Equatable {
         let surface: IOSurfaceID
@@ -16,9 +16,12 @@ final class FrameStreamer: @unchecked Sendable {
     private let simulator: SPSimulator
     private let connection: Connection
     private let onClosed: @Sendable () -> Void
+    private let onShutDown: @Sendable () -> Void
     private let queue = DispatchQueue(label: "simpanel.frames")
     private let encoder = JPEGEncoder()
     private var timer: DispatchSourceTimer?
+    private var bootCheck: DispatchSourceTimer?
+    private var settings = StreamSettings.standard
     private var viewport: Viewport?
     private var lastSent: FrameKey?
     private let verbose: Bool
@@ -36,24 +39,58 @@ final class FrameStreamer: @unchecked Sendable {
         simulator: SPSimulator,
         connection: Connection,
         verbose: Bool,
-        onClosed: @escaping @Sendable () -> Void
+        onClosed: @escaping @Sendable () -> Void,
+        onShutDown: @escaping @Sendable () -> Void
     ) {
         self.simulator = simulator
         self.connection = connection
         self.verbose = verbose
         self.onClosed = onClosed
+        self.onShutDown = onShutDown
     }
 
+    /// Call once, before the first `apply`.
     func start() {
         let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now(), repeating: .milliseconds(1000 / MaxFps))
         timer.setEventHandler { [weak self] in self?.tick() }
-        timer.resume()
         self.timer = timer
+        scheduleFrames()
+        timer.resume()
+        let bootCheck = DispatchSource.makeTimerSource(queue: queue)
+        bootCheck.schedule(deadline: .now() + BootCheckInterval, repeating: BootCheckInterval)
+        bootCheck.setEventHandler { [weak self] in self?.checkBooted() }
+        bootCheck.resume()
+        self.bootCheck = bootCheck
     }
 
     func setViewport(_ viewport: Viewport) {
         queue.async { self.viewport = viewport }
+    }
+
+    func apply(_ settings: StreamSettings) {
+        queue.async {
+            let settings = settings.clamped
+            let previous = self.settings
+            self.settings = settings
+            // Sends the screen again at the new quality without waiting for it to change.
+            if settings.jpegQuality != previous.jpegQuality { self.lastSent = nil }
+            if settings.maxFps != previous.maxFps { self.scheduleFrames() }
+        }
+    }
+
+    private func scheduleFrames() {
+        timer?.schedule(deadline: .now(), repeating: .milliseconds(1000 / settings.maxFps))
+    }
+
+    private func checkBooted() {
+        guard !simulator.isBooted else { return }
+        stop()
+        onShutDown()
+    }
+
+    private func stop() {
+        timer?.cancel()
+        bootCheck?.cancel()
     }
 
     private func tick() {
@@ -64,7 +101,7 @@ final class FrameStreamer: @unchecked Sendable {
         let key = FrameKey(surface: IOSurfaceGetID(surface), seed: surface.seed, scale: scale)
         guard key != lastSent else { return }
         let encodeStart = DispatchTime.now().uptimeNanoseconds
-        guard let jpeg = encoder.encode(surface, scale: scale, quality: JPEGQuality) else { return }
+        guard let jpeg = encoder.encode(surface, scale: scale, quality: settings.jpegQuality) else { return }
         stats.encodeNanoseconds += DispatchTime.now().uptimeNanoseconds - encodeStart
         let writeStart = DispatchTime.now().uptimeNanoseconds
         do {
@@ -73,7 +110,7 @@ final class FrameStreamer: @unchecked Sendable {
             lastSent = key
             stats.sent += 1
         } catch {
-            timer?.cancel()
+            stop()
             onClosed()
         }
     }

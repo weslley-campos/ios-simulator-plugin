@@ -112,8 +112,23 @@ struct MessageTests {
         #expect(try decodePlugin(press) == press)
     }
 
+    @Test func decodesTheSettingsAsThePluginWritesThem() throws {
+        let payload = Data(#"{"maxFps":24,"jpegQuality":0.5}"#.utf8)
+
+        let message = try PluginMessage.decode(type: MessageType.settings.rawValue, payload: payload)
+
+        #expect(message == .settings(StreamSettings(maxFps: 24, jpegQuality: 0.5)))
+        #expect(try decodePlugin(message!) == message)
+    }
+
+    @Test func clampsSettingsToWhatTheHelperStreams() {
+        #expect(StreamSettings(maxFps: 0, jpegQuality: 0).clamped == StreamSettings(maxFps: 1, jpegQuality: 0.1))
+        #expect(StreamSettings(maxFps: 240, jpegQuality: 2).clamped == StreamSettings(maxFps: 60, jpegQuality: 1))
+        #expect(StreamSettings.standard.clamped == .standard)
+    }
+
     @Test func ignoresTypesItDoesNotHandle() throws {
-        #expect(try PluginMessage.decode(type: MessageType.settings.rawValue, payload: Data("{}".utf8)) == nil)
+        #expect(try PluginMessage.decode(type: MessageType.text.rawValue, payload: Data("{}".utf8)) == nil)
         #expect(try PluginMessage.decode(type: 99, payload: Data()) == nil)
         #expect(try HelperMessage.decode(type: MessageType.display.rawValue, payload: Data("{}".utf8)) == nil)
     }

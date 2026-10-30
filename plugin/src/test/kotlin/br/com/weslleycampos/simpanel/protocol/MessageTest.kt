@@ -93,4 +93,12 @@ class MessageTest {
         assertEquals(MessageType.Button.code, press.encoded()[4])
         assertEquals("""{"button":"volume-up","down":true}""", json(press))
     }
+
+    @Test
+    fun writesTheSettingsTheHelperReads() {
+        val settings = PluginMessage.Settings(maxFps = 24, jpegQuality = 0.5)
+
+        assertEquals(MessageType.Settings.code, settings.encoded()[4])
+        assertEquals("""{"maxFps":24,"jpegQuality":0.5}""", json(settings))
+    }
 }
