@@ -37,7 +37,9 @@ let parentWatch = DispatchSource.makeProcessSource(
     eventMask: .exit,
     queue: .global()
 )
-parentWatch.setEventHandler {
+// The handler runs on a global queue; without @Sendable it would be isolated to the main actor,
+// and Swift's runtime check would trap it there.
+parentWatch.setEventHandler { @Sendable in
     log("parent \(parent) exited")
     finish(0)
 }
