@@ -16,6 +16,7 @@ import com.intellij.icons.AllIcons
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.ActionToolbar
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.Separator
@@ -68,8 +69,13 @@ class SimulatorPanel(private val project: Project) :
     private var sessionJob: Job? = null
     private var openSimulator: Simulator? = null
 
+    private var toolbars = emptyList<ActionToolbar>()
+
     override var attached = false
-        private set
+        private set(value) {
+            field = value
+            toolbars.forEach { it.updateActionsAsync() }
+        }
 
     init {
         devices.renderer = SimulatorRenderer()
@@ -85,6 +91,7 @@ class SimulatorPanel(private val project: Project) :
         val controls = ActionManager.getInstance()
             .createActionToolbar(ControlsPlace, controlActions(), true)
         controls.targetComponent = this
+        toolbars = listOf(actions, controls)
         toolbar = JPanel(BorderLayout()).apply {
             border = JBUI.Borders.empty(2, 4)
             add(JPanel(BorderLayout()).apply {
