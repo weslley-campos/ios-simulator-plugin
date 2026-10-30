@@ -25,4 +25,7 @@ interface SimulatorControls {
 
     /** Draws the device around the screen, as Simulator does. */
     var frameVisible: Boolean
+
+    /** Paints how many frames arrived in the last second over the screen. */
+    var frameRateVisible: Boolean
 }

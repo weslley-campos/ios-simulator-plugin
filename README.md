@@ -91,8 +91,10 @@ device, fail at once.
   still booted; Advanced Settings can make it always shut them down or keep them running.
 - Advanced Settings, under iOS Simulator, also sets the stream's frame rate, up to 30 a
   second by default, and its JPEG quality, 70% by default. A change applies to the open
-  screen at once. An internal IDE (`-Didea.is.internal=true`) shows the frame rate at the
-  screen's top left.
+  screen at once.
+- The gear after Shut Down opens the panel's settings menu. Its Show Frame Rate checkbox,
+  off by default, paints how many frames arrived in the last second at the screen's top
+  left.
 
 `SIMPANEL_UDID=<udid> ./gradlew test` also runs the live test, which relaunches Settings on
 that simulator, swipes it through a real helper and expects 25 decoded frames a second. It

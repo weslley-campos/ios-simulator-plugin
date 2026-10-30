@@ -22,6 +22,7 @@ import br.com.weslleycampos.simpanel.simulators.Simulator
 import br.com.weslleycampos.simpanel.simulators.pickSimulator
 import br.com.weslleycampos.simpanel.simulators.screenshotFile
 import br.com.weslleycampos.simpanel.ui.actions.ControlAction
+import br.com.weslleycampos.simpanel.ui.actions.FrameRateToggleAction
 import br.com.weslleycampos.simpanel.ui.actions.FrameToggleAction
 import br.com.weslleycampos.simpanel.ui.actions.SimulatorControls
 import com.intellij.icons.AllIcons
@@ -33,8 +34,8 @@ import com.intellij.openapi.actionSystem.ActionToolbar
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.Separator
+import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.actionSystem.toolbarLayout.ToolbarLayoutStrategy
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.application.asContextElement
@@ -75,6 +76,7 @@ import kotlin.time.TimeSource
 
 private const val LastUdidKey = "simpanel.lastUdid"
 private const val FrameVisibleKey = "simpanel.frameVisible"
+private const val FrameRateVisibleKey = "simpanel.frameRateVisible"
 private const val ToolbarPlace = "SimPanelToolbar"
 private const val ControlsPlace = "SimPanelControls"
 private val Log = logger<SimulatorPanel>()
@@ -137,8 +139,12 @@ class SimulatorPanel(private val project: Project) :
             }
         }
         val shutDown = ControlAction(message("action.shutDown"), AllIcons.Actions.Suspend, this) { shutDown() }
+        val settings = DefaultActionGroup(message("action.settings"), listOf(FrameRateToggleAction(this)))
+        settings.isPopup = true
+        settings.templatePresentation.icon = AllIcons.General.GearPlain
+        settings.templatePresentation.putClientProperty(ActionUtil.HIDE_DROPDOWN_ICON, true)
         val actions = ActionManager.getInstance()
-            .createActionToolbar(ToolbarPlace, DefaultActionGroup(refresh, shutDown), true)
+            .createActionToolbar(ToolbarPlace, DefaultActionGroup(refresh, shutDown, settings), true)
         actions.targetComponent = this
         val controls = ActionManager.getInstance()
             .createActionToolbar(ControlsPlace, controlActions(), true)
@@ -173,7 +179,7 @@ class SimulatorPanel(private val project: Project) :
         scope.launch { watchForBoot() }
         StreamSettings.watch(this) { session?.send(it) }
         screen.frameVisible = PropertiesComponent.getInstance().getBoolean(FrameVisibleKey, true)
-        screen.showFps = ApplicationManager.getApplication().isInternal
+        screen.showFps = PropertiesComponent.getInstance().getBoolean(FrameRateVisibleKey, false)
         screen.showStatus(message("status.loading"), busy = true)
         refresh()
     }
@@ -235,6 +241,13 @@ class SimulatorPanel(private val project: Project) :
         set(value) {
             screen.frameVisible = value
             PropertiesComponent.getInstance().setValue(FrameVisibleKey, value, true)
+        }
+
+    override var frameRateVisible: Boolean
+        get() = screen.showFps
+        set(value) {
+            screen.showFps = value
+            PropertiesComponent.getInstance().setValue(FrameRateVisibleKey, value, false)
         }
 
     override fun shutDown() {

@@ -141,7 +141,7 @@ class ScreenView : JComponent(), Scrollable {
     private val frameTimes = ArrayDeque<Long>()
     private val fpsRepaint = Timer(FpsRepaintMillis) { if (image != null) repaint() }
 
-    /** Paints how many frames arrived in the last second over the screen, for development. */
+    /** Paints how many frames arrived in the last second over the screen. */
     var showFps = false
         set(value) {
             field = value
