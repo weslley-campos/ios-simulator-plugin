@@ -11,6 +11,7 @@ import br.com.weslleycampos.simpanel.keyboard.Keystroke
 import br.com.weslleycampos.simpanel.protocol.DeviceButton
 import br.com.weslleycampos.simpanel.protocol.HelperMessage
 import br.com.weslleycampos.simpanel.protocol.PluginMessage
+import br.com.weslleycampos.simpanel.settings.StreamSettings
 import br.com.weslleycampos.simpanel.simulators.BootWatch
 import br.com.weslleycampos.simpanel.simulators.DeviceHub
 import br.com.weslleycampos.simpanel.simulators.Devicectl
@@ -163,6 +164,7 @@ class SimulatorPanel(private val project: Project) :
             for (step in typing) step()
         }
         scope.launch { watchForBoot() }
+        StreamSettings.watch(this) { session?.send(it) }
         screen.frameVisible = PropertiesComponent.getInstance().getBoolean(FrameVisibleKey, true)
         screen.showFps = ApplicationManager.getApplication().isInternal
         screen.showStatus(message("status.loading"), busy = true)
@@ -403,6 +405,7 @@ class SimulatorPanel(private val project: Project) :
         screen.orientation = Orientation.Portrait
         val session = HelperSession(HelperBinary.path(), simulator.udid)
         this.session = session
+        session.send(StreamSettings.current())
         screen.viewport?.let(session::send)
         var failure: HelperMessage.Failure? = null
         var attachedAt: TimeMark? = null
