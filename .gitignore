@@ -9,3 +9,4 @@ build/
 .intellijPlatform/
 *.iml
 local.properties
+*.hprof
