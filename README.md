@@ -13,6 +13,8 @@ helper/     Swift package: the simpanel helper, which reads the simulator's fram
             injects input through CoreSimulator and SimulatorKit
   Sources/SimBridge/        Objective-C bridge to the private frameworks, loaded at runtime
   Sources/simpanel-spike/   milestone 1, the throwaway proof of the route
+icons/      devicehub.svg, a 512 px icon in DeviceHub's style, and toolWindow.svg with its
+            _dark variant, the 16 px glyph for the tool window
 ```
 
 ## Requirements
