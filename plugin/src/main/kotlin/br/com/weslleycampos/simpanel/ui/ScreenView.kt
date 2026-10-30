@@ -8,9 +8,11 @@ import br.com.weslleycampos.simpanel.screen.DeviceFrame
 import br.com.weslleycampos.simpanel.screen.FrameButton
 import br.com.weslleycampos.simpanel.screen.PlacedFrame
 import br.com.weslleycampos.simpanel.screen.ScaledImage
-import br.com.weslleycampos.simpanel.screen.fitScreen
+import br.com.weslleycampos.simpanel.screen.Zoom
+import br.com.weslleycampos.simpanel.screen.ZoomLevels
 import br.com.weslleycampos.simpanel.screen.fractionOn
 import br.com.weslleycampos.simpanel.screen.placeFrame
+import br.com.weslleycampos.simpanel.screen.placeScreen
 import com.intellij.ui.JBColor
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.util.ui.JBUI
@@ -30,22 +32,31 @@ import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.awt.event.MouseWheelEvent
+import java.awt.geom.Point2D
 import java.awt.image.BufferedImage
 import javax.swing.JComponent
+import javax.swing.JScrollPane
+import javax.swing.JViewport
+import javax.swing.Scrollable
+import javax.swing.SwingConstants
 import javax.swing.SwingUtilities
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 private const val ScreenInset = 8
+
+/** Pixels a scroll bar's arrow scrolls a zoomed screen by. */
+private const val ScrollUnit = 16
 
 /** Points one wheel unit scrolls; macOS sends a unit for every ten points a trackpad moves. */
 private const val WheelUnit = 10.0
 
 /**
- * Paints the simulator's latest frame, fitted to the panel and dressed in the device when the helper
- * sent one. It turns the mouse into touches, scrolls and button presses, and the keyboard, while it
- * has focus, into the simulator's.
+ * Paints the simulator's latest frame, fitted to the panel or at a fixed [zoom] in a scroll pane, and
+ * dressed in the device when the helper sent one. It turns the mouse into touches, scrolls and button
+ * presses, and the keyboard, while it has focus, into the simulator's.
  */
-class ScreenView : JComponent() {
+class ScreenView : JComponent(), Scrollable {
     var onTouch: (PluginMessage.Touch) -> Unit = {}
     var onScroll: (PluginMessage.Scroll) -> Unit = {}
     var onViewport: (PluginMessage.Viewport) -> Unit = {}
@@ -58,10 +69,26 @@ class ScreenView : JComponent() {
     /** Types text the simulator's keyboard has no keys for by pasting it. */
     var onPasteText: (String) -> Unit = {}
 
+    /** Called when [zoomLevels] may have changed: with the zoom, the panel's size or the screen itself. */
+    var onZoomChange: () -> Unit = {}
+
     /** Draws the device around the screen, once the helper has sent it. */
     var frameVisible = true
         set(value) {
             field = value
+            revalidate()
+            layoutChanged()
+        }
+
+    /** How large the screen is shown; a new simulator, or a status in its place, starts it fitting the panel. */
+    var zoom: Zoom = Zoom.Fit
+        set(value) {
+            if (field == value) return
+            val viewport = parent as? JViewport
+            val center = viewport?.let(::centerOf)
+            field = value
+            revalidate()
+            if (viewport != null && center != null) recenter(viewport, center)
             layoutChanged()
         }
 
@@ -82,21 +109,33 @@ class ScreenView : JComponent() {
     /** The space frames may fill, in pixels, so the helper sends them at the panel's resolution. */
     val viewport: PluginMessage.Viewport?
         get() {
-            val area = (placedFrame()?.screen ?: area()).takeUnless { it.isEmpty } ?: return null
-            val scale = graphicsConfiguration?.defaultTransform?.scaleX ?: 1.0
+            val area = (screen() ?: area()).takeUnless { it.isEmpty } ?: return null
+            val scale = pixelScale()
             return PluginMessage.Viewport(
                 width = (area.width * scale).roundToInt(),
                 height = (area.height * scale).roundToInt(),
             )
         }
 
+    /** The zoom the screen is shown at, and the one fitting it in the panel would pick, while it's shown. */
+    val zoomLevels: ZoomLevels?
+        get() {
+            val device = device?.takeIf { image != null } ?: return null
+            val shown = screen() ?: return null
+            val fitted = screen(fitArea(), scale = null) ?: return null
+            val pixels = pixelScale() / device.width
+            return ZoomLevels(shown = shown.width * pixels, fit = fitted.width * pixels)
+        }
+
     init {
         isFocusable = true
+        isOpaque = true
         focusTraversalKeysEnabled = false
         background = JBColor.PanelBackground
         addComponentListener(object : ComponentAdapter() {
             override fun componentResized(e: ComponentEvent) {
                 viewport?.let(onViewport)
+                onZoomChange()
             }
         })
         val mouse = object : MouseAdapter() {
@@ -163,8 +202,10 @@ class ScreenView : JComponent() {
     }
 
     fun show(frame: BufferedImage) {
+        val first = image == null
         image = frame
         repaint()
+        if (first) onZoomChange()
     }
 
     /** Replaces the screen with [text], an optional grey [detail] line and an optional [action] link. */
@@ -177,6 +218,7 @@ class ScreenView : JComponent() {
         image = null
         touching = false
         pressed = null
+        zoom = Zoom.Fit
         keyboard.releaseAll()
         status.clear()
         status.appendText(text)
@@ -185,7 +227,22 @@ class ScreenView : JComponent() {
             status.appendLine(actionText, SimpleTextAttributes.LINK_PLAIN_ATTRIBUTES) { run() }
         }
         repaint()
+        onZoomChange()
     }
+
+    override fun getPreferredSize(): Dimension = zoomedSize() ?: super.getPreferredSize()
+
+    override fun getPreferredScrollableViewportSize(): Dimension = preferredSize
+
+    override fun getScrollableUnitIncrement(visibleRect: Rectangle, orientation: Int, direction: Int) =
+        JBUI.scale(ScrollUnit)
+
+    override fun getScrollableBlockIncrement(visibleRect: Rectangle, orientation: Int, direction: Int) =
+        if (orientation == SwingConstants.VERTICAL) visibleRect.height else visibleRect.width
+
+    override fun getScrollableTracksViewportWidth() = zoomedSize()?.let { parent.width >= it.width } ?: true
+
+    override fun getScrollableTracksViewportHeight() = zoomedSize()?.let { parent.height >= it.height } ?: true
 
     override fun paintComponent(g: Graphics) {
         g.color = background
@@ -216,27 +273,91 @@ class ScreenView : JComponent() {
     private fun layoutChanged() {
         viewport?.let(onViewport)
         repaint()
+        onZoomChange()
     }
 
-    private fun area(): Rectangle {
+    /** Where the middle of what [viewport] shows falls on this component, as fractions of its size. */
+    private fun centerOf(viewport: JViewport): Point2D.Double? {
+        if (width <= 0 || height <= 0) return null
+        val shown = viewport.viewRect
+        return Point2D.Double(shown.centerX / width, shown.centerY / height)
+    }
+
+    /** Lays [viewport] out at the new zoom and scrolls it to show [center] in its middle again. */
+    private fun recenter(viewport: JViewport, center: Point2D.Double) {
+        viewport.parent?.validate()
+        val extent = viewport.extentSize
+        fun position(fraction: Double, size: Int, shown: Int) =
+            (fraction * size - shown / 2.0).roundToInt().coerceIn(0, (size - shown).coerceAtLeast(0))
+        viewport.viewPosition = Point(
+            position(center.x, width, extent.width),
+            position(center.y, height, extent.height),
+        )
+    }
+
+    private fun area(): Rectangle = inset(size)
+
+    /** The space fitting the screen fills: the scroll pane's, as a zoomed screen may be larger. */
+    private fun fitArea(): Rectangle = inset((parent as? JViewport)?.size ?: size)
+
+    private fun inset(size: Dimension): Rectangle {
         val inset = JBUI.scale(ScreenInset)
-        return Rectangle(inset, inset, width - 2 * inset, height - 2 * inset)
+        return Rectangle(inset, inset, size.width - 2 * inset, size.height - 2 * inset)
     }
 
-    private fun placedFrame(): PlacedFrame? =
-        deviceFrame?.takeIf { frameVisible && device != null }?.let { placeFrame(area(), it) }
+    /** The Mac's display pixels per pixel of this component, 2 on a Retina display. */
+    private fun pixelScale(): Double = graphicsConfiguration?.defaultTransform?.scaleX ?: 1.0
 
-    private fun screen(): Rectangle? =
-        (placedFrame()?.screen ?: device?.let { fitScreen(area(), it) })?.takeUnless { it.isEmpty }
+    /** The component's pixels per pixel of the simulator's screen at a fixed zoom; null fits the panel. */
+    private fun screenScale(): Double? = (zoom as? Zoom.Fixed)?.let { it.scale / pixelScale() }
+
+    private fun visibleFrame(): DeviceFrame? = deviceFrame?.takeIf { frameVisible }
+
+    /** The component's pixels per point of [frame] that show the screen at [screenScale]. */
+    private fun frameScale(frame: DeviceFrame, device: Dimension, screenScale: Double) =
+        screenScale * device.width / frame.screen.width
+
+    private fun placedFrame(area: Rectangle = area(), scale: Double? = screenScale()): PlacedFrame? {
+        val frame = visibleFrame() ?: return null
+        val device = device ?: return null
+        return placeFrame(area, frame, scale?.let { frameScale(frame, device, it) })
+    }
+
+    private fun screen(area: Rectangle = area(), scale: Double? = screenScale()): Rectangle? {
+        val placed = placedFrame(area, scale)?.screen ?: device?.let { placeScreen(area, it, scale) }
+        return placed?.takeUnless { it.isEmpty }
+    }
+
+    /** The size the screen, its device and the inset take at a fixed zoom, or null when they fit the panel. */
+    private fun zoomedSize(): Dimension? {
+        val scale = screenScale() ?: return null
+        val device = device ?: return null
+        val frame = visibleFrame()
+        val (width, height) = when (frame) {
+            null -> device.width * scale to device.height * scale
+            else -> frameScale(frame, device, scale).let { frame.width * it to frame.height * it }
+        }
+        val inset = 2 * JBUI.scale(ScreenInset)
+        return Dimension(ceil(width).toInt() + inset, ceil(height).toInt() + inset)
+    }
 
     private fun touch(phase: TouchPhase, screen: Rectangle, point: Point) {
         val fraction = fractionOn(screen, point)
         onTouch(PluginMessage.Touch(phase, fraction.x, fraction.y))
     }
 
-    /** Scrolls what lies under the pointer; macOS sends a sideways scroll with Shift held. */
+    /**
+     * Scrolls what lies under the pointer; macOS sends a sideways scroll with Shift held. Off the screen,
+     * the wheel scrolls a zoomed screen in its scroll pane instead.
+     */
     private fun scroll(e: MouseWheelEvent) {
-        val screen = screen()?.takeIf { image != null && !touching && it.contains(e.point) } ?: return
+        if (touching) return
+        val screen = screen()?.takeIf { image != null && it.contains(e.point) }
+        if (screen == null) {
+            val scrollPane = SwingUtilities.getAncestorOfClass(JScrollPane::class.java, this) ?: return
+            scrollPane.dispatchEvent(SwingUtilities.convertMouseEvent(this, e, scrollPane))
+            return
+        }
         val point = fractionOn(screen, e.point)
         val distance = e.preciseWheelRotation * WheelUnit
         onScroll(

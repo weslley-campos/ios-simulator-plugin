@@ -32,6 +32,14 @@ class PlacedFrameTest {
     }
 
     @Test
+    fun placesTheFrameAtAScaleCenteredInTheArea() {
+        val placed = assertNotNull(placeFrame(Rectangle(0, 0, 1200, 2000), frame, scale = 2.0))
+
+        assertEquals(Rectangle(106, 8, 988, 1984), placed.device)
+        assertEquals(Rectangle(160, 44, 880, 1912), placed.screen)
+    }
+
+    @Test
     fun roundsTheScreensCornersInsideTheBody() {
         val placed = assertNotNull(placeFrame(Rectangle(0, 0, 494, 992), frame))
 

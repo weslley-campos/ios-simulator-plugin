@@ -5,12 +5,14 @@ import java.awt.image.BufferedImage
 
 /**
  * [source] at the size it's drawn at, halved step by step so that a large reduction stays smooth,
- * and kept until it's drawn at another size.
+ * and kept until it's drawn at another size. Drawn at its own size or larger, it's [source] itself,
+ * which drawing enlarges smoothly enough.
  */
 class ScaledImage(val source: BufferedImage) {
     private var scaled: BufferedImage? = null
 
     fun at(width: Int, height: Int): BufferedImage {
+        if (width >= source.width && height >= source.height) return source
         scaled?.let { if (it.width == width && it.height == height) return it }
         var image = source
         while (image.width / 2 >= width && image.height / 2 >= height) {

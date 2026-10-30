@@ -7,10 +7,13 @@ import java.awt.geom.Point2D
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** The largest rectangle with the device's aspect ratio that fits in [area], centered in it. */
-fun fitScreen(area: Rectangle, device: Dimension): Rectangle {
+/**
+ * The [device]'s screen centered in [area], at [scale] pixels of the area per pixel of the device, or
+ * when it's null, at the largest scale that fits.
+ */
+fun placeScreen(area: Rectangle, device: Dimension, scale: Double? = null): Rectangle {
     if (area.isEmpty || device.width <= 0 || device.height <= 0) return Rectangle()
-    val scale = min(area.width.toDouble() / device.width, area.height.toDouble() / device.height)
+    val scale = scale ?: min(area.width.toDouble() / device.width, area.height.toDouble() / device.height)
     val width = (device.width * scale).roundToInt()
     val height = (device.height * scale).roundToInt()
     return Rectangle(

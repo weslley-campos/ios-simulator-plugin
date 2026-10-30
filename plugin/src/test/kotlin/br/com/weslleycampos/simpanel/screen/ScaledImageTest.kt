@@ -33,4 +33,12 @@ class ScaledImageTest {
         assertSame(scaled, image.at(247, 496))
         assertNotSame(scaled, image.at(494, 992))
     }
+
+    @Test
+    fun leavesEnlargingToTheDrawing() {
+        val image = ScaledImage(bezel)
+
+        assertSame(bezel, image.at(1482, 2976))
+        assertSame(bezel, image.at(2964, 5952))
+    }
 }

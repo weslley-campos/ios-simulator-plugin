@@ -23,10 +23,13 @@ class PlacedFrame(
     fun buttonAt(point: Point): FrameButton? = buttons.entries.firstOrNull { it.value.contains(point) }?.key
 }
 
-/** [frame] at the largest size that fits in [area], centered in it, or null when nothing fits. */
-fun placeFrame(area: Rectangle, frame: DeviceFrame): PlacedFrame? {
+/**
+ * [frame] centered in [area], at [scale] pixels of the area per point or, when it's null, at the
+ * largest size that fits; null when the area is empty.
+ */
+fun placeFrame(area: Rectangle, frame: DeviceFrame, scale: Double? = null): PlacedFrame? {
     if (area.isEmpty || frame.width <= 0 || frame.height <= 0) return null
-    val scale = min(area.width / frame.width, area.height / frame.height)
+    val scale = scale ?: min(area.width / frame.width, area.height / frame.height)
     val x = area.x + (area.width - frame.width * scale) / 2
     val y = area.y + (area.height - frame.height * scale) / 2
     // Rounding the edges rather than the sizes keeps the screen's edges under the bezel's hole.

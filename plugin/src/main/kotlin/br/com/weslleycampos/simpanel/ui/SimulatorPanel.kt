@@ -69,7 +69,7 @@ private val PasteSettle = 400.milliseconds
 
 /**
  * The tool window's content: a device picker and the simulator's controls above the live screen
- * of the picked simulator.
+ * of the picked simulator, with its zoom controls floating over it.
  */
 class SimulatorPanel(private val project: Project) :
     SimpleToolWindowPanel(true, true), Disposable, SimulatorControls {
@@ -123,7 +123,9 @@ class SimulatorPanel(private val project: Project) :
             }, BorderLayout.NORTH)
             add(controls.component, BorderLayout.SOUTH)
         }
-        setContent(screen)
+        val zoomControls = ZoomControls(screen, shortcutsTarget = this)
+        setContent(ScreenPane(screen, zoomControls))
+        screen.onZoomChange = zoomControls::update
         screen.onTouch = { session?.send(it) }
         screen.onScroll = { session?.send(it) }
         screen.onViewport = { session?.send(it) }

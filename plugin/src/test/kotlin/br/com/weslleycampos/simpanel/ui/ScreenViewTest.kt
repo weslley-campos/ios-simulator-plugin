@@ -5,19 +5,24 @@ import br.com.weslleycampos.simpanel.keyboard.Keystroke
 import br.com.weslleycampos.simpanel.protocol.DeviceButton
 import br.com.weslleycampos.simpanel.protocol.PluginMessage
 import br.com.weslleycampos.simpanel.protocol.TouchPhase
+import br.com.weslleycampos.simpanel.screen.Zoom
 import br.com.weslleycampos.simpanel.screen.proMaxFrame
 import java.awt.Color
 import java.awt.Component
 import java.awt.Dimension
+import java.awt.Point
 import java.awt.event.InputEvent
 import java.awt.event.KeyEvent
 import java.awt.event.MouseEvent
 import java.awt.event.MouseWheelEvent
 import java.awt.image.BufferedImage
 import javax.swing.JPanel
+import javax.swing.JScrollPane
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ScreenViewTest {
@@ -147,8 +152,8 @@ class ScreenViewTest {
     }
 
     @Test
-    fun asksForFramesAtThePanelsSizeLessItsInset() {
-        assertEquals(PluginMessage.Viewport(484, 884), view().viewport)
+    fun asksForFramesTheSizeOfTheScreen() {
+        assertEquals(PluginMessage.Viewport(407, 884), view().viewport)
     }
 
     @Test
@@ -161,7 +166,7 @@ class ScreenViewTest {
         assertEquals(PluginMessage.Viewport(392, 852), viewports.last())
 
         view.frameVisible = false
-        assertEquals(PluginMessage.Viewport(484, 884), viewports.last())
+        assertEquals(PluginMessage.Viewport(407, 884), viewports.last())
     }
 
     @Test
@@ -212,5 +217,87 @@ class ScreenViewTest {
         assertTrue(view.dispatchKey(typed(view)))
 
         assertEquals(Keystroke(HidUsage.letter('a')).presses(), keys)
+    }
+
+    /** A screen showing a frame in a scroll pane the size of [view]'s panel. */
+    private fun scrolled(): Pair<ScreenView, JScrollPane> {
+        val view = ScreenView()
+        val scrollPane = JScrollPane(view).apply {
+            border = null
+            setSize(500, 900)
+            // Without a window, a scroll pane lays itself out only once it's displayable.
+            addNotify()
+            validate()
+        }
+        view.attach(Dimension(1206, 2622))
+        view.show(frame(Color.RED))
+        return view to scrollPane
+    }
+
+    @Test
+    fun showsTheZoomTheScreenIsShownAtOnceItShows() {
+        val view = view()
+        assertNull(view.zoomLevels)
+
+        view.show(frame(Color.RED))
+
+        val levels = assertNotNull(view.zoomLevels)
+        assertEquals(407.0 / 1206, levels.shown, 0.001)
+        assertEquals(levels.shown, levels.fit)
+    }
+
+    @Test
+    fun zoomsTheScreenInItsScrollPaneAroundTheMiddle() {
+        val (view, scrollPane) = scrolled()
+        val viewports = mutableListOf<PluginMessage.Viewport>()
+        view.onViewport = { viewports += it }
+
+        view.zoom = Zoom.ActualSize
+
+        assertEquals(Dimension(1222, 2638), view.size)
+        assertEquals(PluginMessage.Viewport(1206, 2622), viewports.last())
+        val levels = assertNotNull(view.zoomLevels)
+        assertEquals(1.0, levels.shown)
+        assertTrue(levels.fit < 0.34, "fitting still fits the scroll pane, not the zoomed screen")
+        val shown = scrollPane.viewport.viewRect
+        assertEquals(611.0, shown.centerX, 1.0)
+        assertEquals(1319.0, shown.centerY, 1.0)
+    }
+
+    @Test
+    fun fitsThePanelAgainWhenZoomedToFit() {
+        val (view, scrollPane) = scrolled()
+        view.zoom = Zoom.ActualSize
+
+        view.zoom = Zoom.Fit
+        scrollPane.validate()
+
+        assertEquals(Dimension(500, 900), view.size)
+        assertEquals(407.0 / 1206, assertNotNull(view.zoomLevels).shown, 0.001)
+    }
+
+    @Test
+    fun startsFittingAgainWhenAStatusShows() {
+        val (view, _) = scrolled()
+        view.zoom = Zoom.ActualSize
+
+        view.showStatus("Attaching to iPhone 18 Pro…")
+
+        assertEquals(Zoom.Fit, view.zoom)
+        assertNull(view.zoomLevels)
+    }
+
+    @Test
+    fun scrollsAZoomedScreenWithTheWheelOffTheScreen() {
+        val (view, scrollPane) = scrolled()
+        val scrolls = mutableListOf<PluginMessage.Scroll>()
+        view.onScroll = { scrolls += it }
+        view.zoom = Zoom.ActualSize
+        scrollPane.viewport.viewPosition = Point(0, 0)
+
+        view.wheel(4, 100, rotation = 3.0)
+
+        assertTrue(scrollPane.viewport.viewPosition.y > 0, "the scroll pane scrolled")
+        assertEquals(emptyList(), scrolls)
     }
 }

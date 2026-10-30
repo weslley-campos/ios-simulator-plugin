@@ -13,23 +13,29 @@ class ScreenGeometryTest {
 
     @Test
     fun fitsATallScreenToTheAreaHeightAndCentersIt() {
-        assertEquals(Rectangle(359, 0, 402, 874), fitScreen(Rectangle(0, 0, 1120, 874), iPhone))
+        assertEquals(Rectangle(359, 0, 402, 874), placeScreen(Rectangle(0, 0, 1120, 874), iPhone))
     }
 
     @Test
     fun fitsAWideScreenToTheAreaWidthAndCentersIt() {
-        assertEquals(Rectangle(0, 300, 874, 402), fitScreen(Rectangle(0, 0, 874, 1002), Dimension(2622, 1206)))
+        assertEquals(Rectangle(0, 300, 874, 402), placeScreen(Rectangle(0, 0, 874, 1002), Dimension(2622, 1206)))
     }
 
     @Test
     fun keepsTheAreaOffset() {
-        assertEquals(Rectangle(8, 8, 402, 874), fitScreen(Rectangle(8, 8, 402, 874), iPhone))
+        assertEquals(Rectangle(8, 8, 402, 874), placeScreen(Rectangle(8, 8, 402, 874), iPhone))
+    }
+
+    @Test
+    fun placesTheScreenAtAScaleCenteredInTheArea() {
+        assertEquals(Rectangle(258, 125, 603, 1311), placeScreen(Rectangle(0, 0, 1120, 1562), iPhone, 0.5))
+        assertEquals(Rectangle(8, 8, 1206, 2622), placeScreen(Rectangle(8, 8, 1206, 2622), iPhone, 1.0))
     }
 
     @Test
     fun hasNoScreenWithoutAnAreaOrADevice() {
-        assertTrue(fitScreen(Rectangle(0, 0, 0, 874), iPhone).isEmpty)
-        assertTrue(fitScreen(Rectangle(0, 0, 402, 874), Dimension(0, 0)).isEmpty)
+        assertTrue(placeScreen(Rectangle(0, 0, 0, 874), iPhone).isEmpty)
+        assertTrue(placeScreen(Rectangle(0, 0, 402, 874), Dimension(0, 0)).isEmpty)
     }
 
     @Test
