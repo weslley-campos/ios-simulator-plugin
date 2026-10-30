@@ -107,6 +107,8 @@ enum ChromeRenderer {
         let box = page.getBoxRect(.mediaBox)
         guard box.width > 0, box.height > 0 else { return }
         context.saveGState()
+        // drawPDFPage doesn't clip to the page, and some chromes, such as phone11's, draw past it.
+        context.clip(to: rect)
         context.translateBy(x: rect.minX, y: rect.minY)
         context.scaleBy(x: rect.width / box.width, y: rect.height / box.height)
         // PDFs draw from the bottom left, so flip the page inside its own box.
