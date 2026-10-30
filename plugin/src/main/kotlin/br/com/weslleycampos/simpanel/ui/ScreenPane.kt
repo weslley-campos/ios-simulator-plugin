@@ -15,8 +15,9 @@ class ScreenPane(screen: ScreenView, private val controls: JComponent) : JBLayer
     private val scrollPane = ScrollPaneFactory.createScrollPane(screen, true)
 
     init {
-        add(scrollPane, JLayeredPane.DEFAULT_LAYER)
-        add(controls, JLayeredPane.PALETTE_LAYER)
+        setLayer(controls, JLayeredPane.PALETTE_LAYER)
+        add(scrollPane)
+        add(controls)
     }
 
     override fun doLayout() {
