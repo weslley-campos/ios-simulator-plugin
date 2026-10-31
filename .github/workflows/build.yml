@@ -1,15 +1,18 @@
 name: Build
 
+# A push to main whose plugin version has no tag yet releases that version: the build signs it,
+# then the jobs below publish it and tag the commit. Tags aren't pushed by hand, so each commit
+# builds once.
 on:
   push:
     branches: ["**"]
-    tags: ["v*"]
   pull_request:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Never cancel a release halfway through publishing.
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+  # Runs on main queue instead, so a release never stops halfway through publishing and the next
+  # run sees its tag.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -25,8 +28,25 @@ jobs:
     defaults:
       run:
         working-directory: plugin
+    outputs:
+      release: ${{ steps.version.outputs.release }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
+
+      - name: Check whether this push releases a new version
+        id: version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' build.gradle.kts)
+          tag="v$version"
+          release=false
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ] \
+            && [ -z "$(git ls-remote --tags origin "refs/tags/$tag")" ]; then
+            release=true
+          fi
+          echo "Version $version, release: $release"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-java@v6
         with:
@@ -58,18 +78,9 @@ jobs:
       - name: Verify against older Android Studio releases
         run: ./gradlew verifyPlugin
 
-      - name: Check the tag matches the plugin version
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' build.gradle.kts)
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME doesn't match version $version in plugin/build.gradle.kts"
-            exit 1
-          fi
-
       # Writes simpanel-<version>-signed.zip next to the unsigned zip.
       - name: Sign the plugin
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: steps.version.outputs.release == 'true'
         env:
           CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
@@ -86,7 +97,7 @@ jobs:
   # Each release job reruns on its own: "Re-run failed jobs" repeats only the one that failed.
   github-release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: needs.build.outputs.release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -96,21 +107,23 @@ jobs:
         with:
           name: simpanel-plugin
 
-      # Uploads the signed zip again when a rerun finds the release already made.
+      # Creates the tag on the built commit. Uploads the signed zip again when a rerun finds the
+      # release already made.
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.build.outputs.tag }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" *-signed.zip --clobber
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" *-signed.zip --clobber
           else
-            gh release create "$GITHUB_REF_NAME" *-signed.zip --title "$GITHUB_REF_NAME" --generate-notes
+            gh release create "$TAG" *-signed.zip --target "$GITHUB_SHA" --title "$TAG" --generate-notes
           fi
 
   marketplace:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: needs.build.outputs.release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
