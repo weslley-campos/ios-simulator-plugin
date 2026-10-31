@@ -8,6 +8,7 @@ import br.com.weslleycampos.simpanel.protocol.TouchPhase
 import br.com.weslleycampos.simpanel.screen.Zoom
 import br.com.weslleycampos.simpanel.screen.proMaxFrame
 import br.com.weslleycampos.simpanel.simulators.Orientation
+import org.junit.jupiter.api.extension.ExtendWith
 import java.awt.Color
 import java.awt.Component
 import java.awt.Dimension
@@ -27,6 +28,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+@ExtendWith(OnEdt::class)
 class ScreenViewTest {
     private fun view(): ScreenView = ScreenView().apply {
         setSize(500, 900)
