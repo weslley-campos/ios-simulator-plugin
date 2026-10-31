@@ -15,7 +15,7 @@ plugins {
 }
 
 group = "br.com.weslleycampos.simpanel"
-version = "1.0.0"
+version = "1.0.1"
 
 // Builds with JDK 25 but emits Java 21 bytecode: Android Studio runs on Java 21 before 2026.1.
 kotlin {
