@@ -20,6 +20,9 @@ jobs:
     # as a preview; move to macos-27 once that label exists.
     runs-on: xcode-27
     timeout-minutes: 60
+    # Write access creates the GitHub release for a tag; other events only read.
+    permissions:
+      contents: write
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
     defaults:
@@ -72,6 +75,13 @@ jobs:
             echo "::error::Tag $GITHUB_REF_NAME doesn't match version $version in plugin/build.gradle.kts"
             exit 1
           fi
+
+      # Before publishing, so the release exists even when Marketplace refuses the upload.
+      - name: Create the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" build/distributions/*.zip --title "$GITHUB_REF_NAME" --generate-notes
 
       - name: Sign and publish to JetBrains Marketplace
         if: startsWith(github.ref, 'refs/tags/v')
