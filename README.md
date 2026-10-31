@@ -9,6 +9,11 @@
   A live, interactive simulator in a tool window. No window switching.
 </p>
 
+<p align="center">
+  <a href="https://plugins.jetbrains.com/plugin/35669"><img src="https://img.shields.io/jetbrains/plugin/v/35669" alt="JetBrains Marketplace version"></a>
+  <a href="https://plugins.jetbrains.com/plugin/35669"><img src="https://img.shields.io/jetbrains/plugin/d/35669" alt="Downloads"></a>
+</p>
+
 ---
 
 iOS Simulator docks a booted simulator in Android Studio the same way **Running Devices** shows the Android emulator. No more switching windows to test the iOS side of a Kotlin Multiplatform or Compose Multiplatform app.
