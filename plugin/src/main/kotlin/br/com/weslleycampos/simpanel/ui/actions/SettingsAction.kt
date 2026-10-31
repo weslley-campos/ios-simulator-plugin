@@ -57,8 +57,11 @@ class SettingsAction(private val controls: SimulatorControls) :
         }
         row(message("settings.jpegQuality")) {
             spinner(10..100, step = 5)
-                .applyToComponent { number = AdvancedSettings.getInt(JpegQualitySettingId).coerceIn(10, 100) }
-                .onChanged { AdvancedSettings.setInt(JpegQualitySettingId, it.number) }
+                .applyToComponent {
+                    number = AdvancedSettings.getInt(JpegQualitySettingId).coerceIn(10, 100)
+                    // The UI DSL's onChanged does not support JBIntSpinner, so listen on the spinner itself.
+                    addChangeListener { AdvancedSettings.setInt(JpegQualitySettingId, number) }
+                }
             label("%")
         }
         row(message("settings.shutDownOnClose")) {
