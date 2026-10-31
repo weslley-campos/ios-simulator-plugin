@@ -20,9 +20,6 @@ jobs:
     # as a preview; move to macos-27 once that label exists.
     runs-on: xcode-27
     timeout-minutes: 60
-    # Write access creates the GitHub release for a tag; other events only read.
-    permissions:
-      contents: write
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
     defaults:
@@ -61,12 +58,6 @@ jobs:
       - name: Verify against older Android Studio releases
         run: ./gradlew verifyPlugin
 
-      - uses: actions/upload-artifact@v7
-        with:
-          name: simpanel-plugin
-          path: plugin/build/distributions/*.zip
-          if-no-files-found: error
-
       - name: Check the tag matches the plugin version
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
@@ -76,18 +67,64 @@ jobs:
             exit 1
           fi
 
-      # Before publishing, so the release exists even when Marketplace refuses the upload.
-      - name: Create the GitHub release
+      # Writes simpanel-<version>-signed.zip next to the unsigned zip.
+      - name: Sign the plugin
         if: startsWith(github.ref, 'refs/tags/v')
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" build/distributions/*.zip --title "$GITHUB_REF_NAME" --generate-notes
-
-      - name: Sign and publish to JetBrains Marketplace
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
           CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
           PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
-        run: ./gradlew signPlugin publishPlugin
+        run: ./gradlew signPlugin
+
+      # The release jobs below take the zip from here, so rerunning one of them builds nothing.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: simpanel-plugin
+          path: plugin/build/distributions/*.zip
+          if-no-files-found: error
+
+  # Each release job reruns on its own: "Re-run failed jobs" repeats only the one that failed.
+  github-release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: simpanel-plugin
+
+      # Uploads the signed zip again when a rerun finds the release already made.
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" *-signed.zip --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" *-signed.zip --title "$GITHUB_REF_NAME" --generate-notes
+          fi
+
+  marketplace:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: simpanel-plugin
+
+      # https://plugins.jetbrains.com/docs/marketplace/plugin-upload.html
+      - name: Publish to JetBrains Marketplace
+        env:
+          PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --header "Authorization: Bearer $PUBLISH_TOKEN" \
+            --form xmlId=br.com.weslleycampos.simpanel \
+            --form file=@"$(ls *-signed.zip)" \
+            https://plugins.jetbrains.com/api/updates/upload

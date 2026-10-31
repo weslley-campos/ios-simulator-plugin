@@ -68,7 +68,15 @@ Then, on plugins.jetbrains.com, open your profile → **Add new plugin** and upl
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
-## 5. Keep the keys safe
+## 5. When a release fails
+
+A tag runs three jobs: `build` tests, builds and signs the plugin on macOS, then `github-release` and `marketplace` each take its signed zip and publish it. When one of the last two fails, fix the cause and click **Re-run failed jobs** on the run: only that job runs again, in under a minute, without building anything.
+
+- **`Authentication Failed: Invalid token`**: Marketplace refused `PUBLISH_TOKEN`. Generate a new token and set it again with `gh secret set PUBLISH_TOKEN`, pasting the whole token, `perm:` prefix included.
+- **The plugin isn't on Marketplace yet**: upload the first version by hand (step 4).
+- **Marketplace already has this version**: there's nothing to publish for this tag; the next version tag publishes.
+
+## 6. Keep the keys safe
 
 - Store `private_encrypted.pem`, `chain.crt` and the password in your password manager. Every future release needs the same key.
 - Delete the unencrypted copy after adding the secrets:
