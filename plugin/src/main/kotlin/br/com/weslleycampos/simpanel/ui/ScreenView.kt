@@ -19,10 +19,12 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.StatusText
+import java.awt.Component
 import java.awt.Cursor
 import java.awt.Dimension
 import java.awt.Graphics
 import java.awt.Graphics2D
+import java.awt.KeyboardFocusManager
 import java.awt.Point
 import java.awt.Rectangle
 import java.awt.RenderingHints
@@ -232,8 +234,15 @@ class ScreenView : JComponent(), Scrollable {
         })
     }
 
-    /** Types [e] on the simulator while the screen has focus; true when the IDE shouldn't see it. */
-    fun dispatchKey(e: KeyEvent): Boolean = e.component === this && image != null && keyboard.dispatch(e)
+    /**
+     * Types [e] on the simulator while the screen has focus; true when the IDE shouldn't see it. It
+     * asks for the focus owner rather than reading [e]'s source, which is still the window when the
+     * IDE's event queue hands the event over, before the focus manager retargets it.
+     */
+    fun dispatchKey(
+        e: KeyEvent,
+        focusOwner: Component? = KeyboardFocusManager.getCurrentKeyboardFocusManager().focusOwner,
+    ): Boolean = focusOwner === this && image != null && keyboard.dispatch(e)
 
     /** Starts a new session's screen, bare until [showDeviceFrame] dresses it. */
     fun attach(device: Dimension) {

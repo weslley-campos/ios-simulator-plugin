@@ -10,7 +10,6 @@ import br.com.weslleycampos.simpanel.screen.proMaxFrame
 import br.com.weslleycampos.simpanel.simulators.Orientation
 import org.junit.jupiter.api.extension.ExtendWith
 import java.awt.Color
-import java.awt.Component
 import java.awt.Dimension
 import java.awt.Point
 import java.awt.event.InputEvent
@@ -245,14 +244,15 @@ class ScreenViewTest {
         val view = view()
         val keys = mutableListOf<PluginMessage.Key>()
         view.onKey = { keys += it }
-        val typed = { source: Component ->
-            KeyEvent(source, KeyEvent.KEY_TYPED, 0, 0, KeyEvent.VK_UNDEFINED, 'a')
-        }
+        // The IDE's event queue hands key events over with the window as their source, before the
+        // focus manager retargets them to the focus owner.
+        val window = JPanel()
+        val typed = KeyEvent(window, KeyEvent.KEY_TYPED, 0, 0, KeyEvent.VK_UNDEFINED, 'a')
 
-        assertFalse(view.dispatchKey(typed(view)), "no screen shows yet")
+        assertFalse(view.dispatchKey(typed, focusOwner = view), "no screen shows yet")
         view.show(frame(Color.RED))
-        assertFalse(view.dispatchKey(typed(JPanel())), "another component has focus")
-        assertTrue(view.dispatchKey(typed(view)))
+        assertFalse(view.dispatchKey(typed, focusOwner = JPanel()), "another component has focus")
+        assertTrue(view.dispatchKey(typed, focusOwner = view))
 
         assertEquals(Keystroke(HidUsage.letter('a')).presses(), keys)
     }

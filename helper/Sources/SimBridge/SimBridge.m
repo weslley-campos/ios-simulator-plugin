@@ -28,6 +28,7 @@ static const uint32_t IndigoEdgeNone = 0;
 static const uint32_t IndigoButtonHome = 0x0;
 static const uint32_t IndigoButtonLock = 0x1;
 static const uint32_t IndigoButtonSiri = 0x400002;
+static const uint32_t HIDPageKeyboard = 0x07;
 
 // An Indigo message is a mach header, then a payload stride at 0x18 and a payload count at
 // 0x1c, then the payloads from 0x20. The builders leave msgh_size unset; the client reads it.
@@ -39,7 +40,6 @@ typedef void *_Nullable (*IndigoMouseFn)(CGPoint *point, CGPoint *_Nullable seco
                                          uint32_t target, NSUInteger eventType, CGSize size,
                                          NSUInteger edge);
 typedef void *_Nullable (*IndigoButtonFn)(uint32_t source, uint32_t direction, uint32_t target);
-typedef void *_Nullable (*IndigoKeyboardFn)(uint32_t usage, uint32_t direction);
 typedef void *_Nullable (*IndigoArbitraryFn)(uint32_t target, uint32_t page, uint32_t usage,
                                              uint32_t direction);
 
@@ -96,7 +96,6 @@ static NSError *SPMakeError(SPError code, NSString *message) {
 @property (nonatomic, assign) void *simulatorKit;
 @property (nonatomic, assign) IndigoMouseFn mouseMessage;
 @property (nonatomic, assign) IndigoButtonFn buttonMessage;
-@property (nonatomic, assign) IndigoKeyboardFn keyboardMessage;
 @property (nonatomic, assign) IndigoArbitraryFn arbitraryMessage;
 @end
 
@@ -206,14 +205,11 @@ static NSError *SPMakeError(SPError code, NSString *message) {
     if (self.hid) return YES;
     self.mouseMessage = (IndigoMouseFn)dlsym(self.simulatorKit, "IndigoHIDMessageForMouseNSEvent");
     self.buttonMessage = (IndigoButtonFn)dlsym(self.simulatorKit, "IndigoHIDMessageForButton");
-    self.keyboardMessage =
-        (IndigoKeyboardFn)dlsym(self.simulatorKit, "IndigoHIDMessageForKeyboardArbitrary");
     self.arbitraryMessage =
         (IndigoArbitraryFn)dlsym(self.simulatorKit, "IndigoHIDMessageForHIDArbitrary");
     Class clientClass = NSClassFromString(@"SimulatorKit.SimDeviceLegacyHIDClient")
         ?: NSClassFromString(@"_TtC12SimulatorKit24SimDeviceLegacyHIDClient");
-    if (!self.mouseMessage || !self.buttonMessage || !self.keyboardMessage
-        || !self.arbitraryMessage || !clientClass) {
+    if (!self.mouseMessage || !self.buttonMessage || !self.arbitraryMessage || !clientClass) {
         if (error) *error = SPMakeError(SPErrorHIDUnavailable, @"IndigoHID symbols missing");
         return NO;
     }
@@ -263,7 +259,10 @@ static NSError *SPMakeError(SPError code, NSString *message) {
 }
 
 - (void)key:(uint32_t)usage down:(BOOL)down {
-    [self send:self.keyboardMessage(usage, down ? IndigoDirectionDown : IndigoDirectionUp)];
+    // Keys go as keyboard-page usages through the digitizer target, like the arbitrary usages
+    // above. Xcode 27.2 drops the messages IndigoHIDMessageForKeyboardArbitrary builds without
+    // an error.
+    [self usagePage:HIDPageKeyboard usage:usage down:down];
 }
 
 - (void)send:(nullable void *)message {
