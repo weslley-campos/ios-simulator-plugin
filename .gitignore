@@ -12,6 +12,6 @@ local.properties
 *.hprof
 .kotlin/
 
-# Plugin signing keys (docs/releasing.md)
+# Plugin signing keys
 *.pem
 *.crt

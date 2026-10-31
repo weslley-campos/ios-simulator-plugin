@@ -102,11 +102,3 @@ helper/   Swift helper that streams the simulator screen and injects input
 plugin/   Android Studio plugin (Kotlin), bundles the helper
 icons/    Artwork
 ```
-
-### Releasing
-
-Bump `version` in `plugin/build.gradle.kts`, commit, then push a matching tag:
-
-```sh
-git tag v0.2.0 && git push origin v0.2.0
-```
