@@ -2,7 +2,7 @@
   <img src="icons/devicehub.svg" width="128" alt="iOS Simulator logo">
 </p>
 
-<h1 align="center">iOS Simulator</h1>
+<h1 align="center">iOS Simulator Plugin</h1>
 
 <p align="center">
   <b>Run your iOS app in Android Studio, right next to the code.</b><br>
