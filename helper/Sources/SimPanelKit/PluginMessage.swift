@@ -57,6 +57,16 @@ public struct Key: Codable, Equatable, Sendable {
     }
 }
 
+/// Whether the simulator shows its on-screen keyboard, or hides it as though a hardware keyboard
+/// were connected.
+public struct SoftwareKeyboard: Codable, Equatable, Sendable {
+    public let shown: Bool
+
+    public init(shown: Bool) {
+        self.shown = shown
+    }
+}
+
 /// A hardware button going down or up, named as the device chrome names it.
 public struct ButtonPress: Codable, Equatable, Sendable {
     public let button: DeviceButton
@@ -103,6 +113,7 @@ public enum PluginMessage: Equatable, Sendable {
     case key(Key)
     case button(ButtonPress)
     case settings(StreamSettings)
+    case softwareKeyboard(SoftwareKeyboard)
 
     public func encoded() throws -> Data {
         switch self {
@@ -121,6 +132,11 @@ public enum PluginMessage: Equatable, Sendable {
             Framing.encode(type: MessageType.button.rawValue, payload: try JSONEncoder().encode(press))
         case .settings(let settings):
             Framing.encode(type: MessageType.settings.rawValue, payload: try JSONEncoder().encode(settings))
+        case .softwareKeyboard(let keyboard):
+            Framing.encode(
+                type: MessageType.softwareKeyboard.rawValue,
+                payload: try JSONEncoder().encode(keyboard)
+            )
         }
     }
 
@@ -133,6 +149,8 @@ public enum PluginMessage: Equatable, Sendable {
         case .key: .key(try JSONDecoder().decode(Key.self, from: payload))
         case .button: .button(try JSONDecoder().decode(ButtonPress.self, from: payload))
         case .settings: .settings(try JSONDecoder().decode(StreamSettings.self, from: payload))
+        case .softwareKeyboard:
+            .softwareKeyboard(try JSONDecoder().decode(SoftwareKeyboard.self, from: payload))
         default: nil
         }
     }

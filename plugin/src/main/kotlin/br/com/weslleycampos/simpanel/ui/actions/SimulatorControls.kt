@@ -26,6 +26,12 @@ interface SimulatorControls {
     /** Draws the device around the screen, as Simulator does. */
     var frameVisible: Boolean
 
+    /**
+     * Shows the simulator's on-screen keyboard while a text field has focus; hidden, the simulator
+     * acts as though a hardware keyboard were connected. The Mac keyboard types either way.
+     */
+    var softwareKeyboardShown: Boolean
+
     /** Paints how many frames arrived in the last second over the screen. */
     var frameRateVisible: Boolean
 }

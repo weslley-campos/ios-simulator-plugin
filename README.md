@@ -22,7 +22,7 @@ iOS Simulator docks a booted simulator in Android Studio the same way **Running 
 
 - **Live screen** at up to 60 fps, with the device frame drawn around it.
 - **Touch input**: click to tap, drag to swipe, scroll with the trackpad or mouse wheel.
-- **Keyboard**: type straight into the simulator. `⌘V` pastes your Mac clipboard; `⌘A` `⌘C` `⌘X` `⌘Z` work on the device.
+- **Keyboard**: type straight into the simulator. `⌘V` pastes your Mac clipboard; `⌘A` `⌘C` `⌘X` `⌘Z` work on the device. The keyboard button in the toolbar shows or hides the on-screen keyboard; it's shown by default.
 - **Hardware buttons**: Power, Volume, Home, App Switcher, plus clickable buttons on the device frame.
 - **Rotate**, **screenshot** and **paste** from the toolbar.
 - **Zoom**: Fit, Actual Size, zoom in and out.

@@ -12,7 +12,8 @@ enum class MessageType(val code: Byte) {
     Key(19),
     Text(20),
     Button(21),
-    Settings(22);
+    Settings(22),
+    SoftwareKeyboard(23);
 
     companion object {
         fun of(code: Byte): MessageType? = entries.firstOrNull { it.code == code }

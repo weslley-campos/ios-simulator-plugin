@@ -13,4 +13,5 @@ public enum MessageType: UInt8, Sendable {
     case text = 20
     case button = 21
     case settings = 22
+    case softwareKeyboard = 23
 }

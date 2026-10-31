@@ -65,6 +65,10 @@ typedef NS_ENUM(NSInteger, SPButton) {
 /// Sends a key by its HID keyboard usage code.
 - (void)key:(uint32_t)usage down:(BOOL)down;
 
+/// Shows the on-screen keyboard, or hides it by simulating a hardware keyboard of the Mac's type.
+/// Keys typed with key:down: reach the device either way.
+- (BOOL)setSoftwareKeyboardShown:(BOOL)shown error:(NSError **)error;
+
 @end
 
 NS_ASSUME_NONNULL_END

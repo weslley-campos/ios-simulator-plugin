@@ -5,6 +5,7 @@
 //                 [--swipe x1,y1,x2,y2] [--button home|power|volume-up|volume-down|action|siri]
 //                 [--presses 1] [--gap 0] [--scroll x,y,dx,dy] [--scrolls 1]
 //                 [--keys S11,A8,C25] [--keep] [--fps 30] [--quality 0.7]
+//                 [--software-keyboard shown|hidden]
 
 import Foundation
 import SimPanelKit
@@ -71,6 +72,11 @@ if option("--fps") != nil || option("--quality") != nil {
         jpegQuality: option("--quality").flatMap { Double($0) } ?? standard.jpegQuality
     )
     try connection.write(PluginMessage.settings(settings).encoded())
+}
+if let keyboard = option("--software-keyboard") {
+    guard ["shown", "hidden"].contains(keyboard) else { fail("--software-keyboard is shown or hidden") }
+    let message = PluginMessage.softwareKeyboard(SoftwareKeyboard(shown: keyboard == "shown"))
+    try connection.write(message.encoded())
 }
 
 let start = Date()

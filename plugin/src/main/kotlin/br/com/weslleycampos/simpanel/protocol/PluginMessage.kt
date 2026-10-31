@@ -46,6 +46,13 @@ sealed interface PluginMessage {
             Framing.encode(MessageType.Button, SimPanelJson.encodeToString(this).encodeToByteArray())
     }
 
+    /** Whether the simulator shows its on-screen keyboard, or hides it as though a hardware keyboard were connected. */
+    @Serializable
+    data class SoftwareKeyboard(val shown: Boolean) : PluginMessage {
+        override fun encoded() =
+            Framing.encode(MessageType.SoftwareKeyboard, SimPanelJson.encodeToString(this).encodeToByteArray())
+    }
+
     /** How often the helper sends a frame, at most, and the JPEG quality it encodes them at, from 0 to 1. */
     @Serializable
     data class Settings(val maxFps: Int, val jpegQuality: Double) : PluginMessage {

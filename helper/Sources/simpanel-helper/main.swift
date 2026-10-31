@@ -128,6 +128,12 @@ func handle(_ message: PluginMessage) {
         press.button.send(down: press.down, to: simulator)
     case .settings(let settings):
         streamer.apply(settings)
+    case .softwareKeyboard(let keyboard):
+        do {
+            try simulator.setSoftwareKeyboardShown(keyboard.shown)
+        } catch {
+            log("couldn't \(keyboard.shown ? "show" : "hide") the software keyboard: \(error)")
+        }
     }
 }
 

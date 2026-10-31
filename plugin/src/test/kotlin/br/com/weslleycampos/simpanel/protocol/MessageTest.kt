@@ -101,4 +101,12 @@ class MessageTest {
         assertEquals(MessageType.Settings.code, settings.encoded()[4])
         assertEquals("""{"maxFps":24,"jpegQuality":0.5}""", json(settings))
     }
+
+    @Test
+    fun writesTheSoftwareKeyboardTheHelperReads() {
+        val keyboard = PluginMessage.SoftwareKeyboard(shown = false)
+
+        assertEquals(MessageType.SoftwareKeyboard.code, keyboard.encoded()[4])
+        assertEquals("""{"shown":false}""", json(keyboard))
+    }
 }

@@ -6,7 +6,7 @@ Made for Kotlin Multiplatform and Compose Multiplatform projects: test the iOS s
 
 - **Live screen** at up to 60 fps, inside the device frame.
 - **Touch**: click to tap, drag to swipe, scroll with the trackpad or mouse wheel.
-- **Keyboard**: type straight into the simulator. `⌘V` pastes your Mac clipboard.
+- **Keyboard**: type straight into the simulator. `⌘V` pastes your Mac clipboard. Show or hide the on-screen keyboard from the toolbar.
 - **Hardware buttons**: Power, Volume, Home and App Switcher, from the toolbar or the device frame.
 - **Rotate, screenshot and zoom** from the toolbar.
 - **Device picker**: lists every simulator and boots the one you pick.

@@ -24,6 +24,7 @@ import br.com.weslleycampos.simpanel.simulators.pickSimulator
 import br.com.weslleycampos.simpanel.simulators.screenshotFile
 import br.com.weslleycampos.simpanel.ui.actions.ControlAction
 import br.com.weslleycampos.simpanel.ui.actions.FrameToggleAction
+import br.com.weslleycampos.simpanel.ui.actions.SoftwareKeyboardToggleAction
 import br.com.weslleycampos.simpanel.ui.actions.SettingsAction
 import br.com.weslleycampos.simpanel.ui.actions.SimulatorControls
 import com.intellij.icons.AllIcons
@@ -77,6 +78,7 @@ import kotlin.time.TimeSource
 private const val LastUdidKey = "simpanel.lastUdid"
 private const val FrameVisibleKey = "simpanel.frameVisible"
 private const val FrameRateVisibleKey = "simpanel.frameRateVisible"
+private const val SoftwareKeyboardShownKey = "simpanel.softwareKeyboardShown"
 private const val ToolbarPlace = "SimPanelToolbar"
 private const val ControlsPlace = "SimPanelControls"
 private val Log = logger<SimulatorPanel>()
@@ -241,6 +243,13 @@ class SimulatorPanel(private val project: Project) :
             PropertiesComponent.getInstance().setValue(FrameVisibleKey, value, true)
         }
 
+    override var softwareKeyboardShown: Boolean
+        get() = PropertiesComponent.getInstance().getBoolean(SoftwareKeyboardShownKey, true)
+        set(value) {
+            PropertiesComponent.getInstance().setValue(SoftwareKeyboardShownKey, value, true)
+            session?.send(PluginMessage.SoftwareKeyboard(value))
+        }
+
     override var frameRateVisible: Boolean
         get() = screen.showFps
         set(value) {
@@ -297,6 +306,7 @@ class SimulatorPanel(private val project: Project) :
         ControlAction(message("action.paste"), AllIcons.Actions.MenuPaste, this) { paste() },
         Separator.create(),
         FrameToggleAction(this),
+        SoftwareKeyboardToggleAction(this),
     )
 
     /** Lists the simulators and shows one, unless the panel is already busy showing one. */
@@ -445,6 +455,7 @@ class SimulatorPanel(private val project: Project) :
         val session = HelperSession(HelperBinary.path(), simulator.udid)
         this.session = session
         session.send(StreamSettings.current())
+        session.send(PluginMessage.SoftwareKeyboard(softwareKeyboardShown))
         screen.viewport?.let(session::send)
         var failure: HelperMessage.Failure? = null
         var attachedAt: TimeMark? = null

@@ -121,6 +121,15 @@ struct MessageTests {
         #expect(try decodePlugin(message!) == message)
     }
 
+    @Test func decodesTheSoftwareKeyboardAsThePluginWritesIt() throws {
+        let payload = Data(#"{"shown":false}"#.utf8)
+
+        let message = try PluginMessage.decode(type: MessageType.softwareKeyboard.rawValue, payload: payload)
+
+        #expect(message == .softwareKeyboard(SoftwareKeyboard(shown: false)))
+        #expect(try decodePlugin(message!) == message)
+    }
+
     @Test func clampsSettingsToWhatTheHelperStreams() {
         #expect(StreamSettings(maxFps: 0, jpegQuality: 0).clamped == StreamSettings(maxFps: 1, jpegQuality: 0.1))
         #expect(StreamSettings(maxFps: 240, jpegQuality: 2).clamped == StreamSettings(maxFps: 60, jpegQuality: 1))

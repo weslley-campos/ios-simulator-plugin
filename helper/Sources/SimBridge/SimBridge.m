@@ -42,10 +42,17 @@ typedef void *_Nullable (*IndigoMouseFn)(CGPoint *point, CGPoint *_Nullable seco
 typedef void *_Nullable (*IndigoButtonFn)(uint32_t source, uint32_t direction, uint32_t target);
 typedef void *_Nullable (*IndigoArbitraryFn)(uint32_t target, uint32_t page, uint32_t usage,
                                              uint32_t direction);
+typedef uint8_t (*IndigoKeyboardTypeFn)(void);
 
 @protocol SPServiceContextClass <NSObject>
 + (nullable id)sharedServiceContextForDeveloperDir:(NSString *)developerDir
                                              error:(NSError **)error;
+@end
+
+@protocol SPHardwareKeyboard <NSObject>
+- (BOOL)setHardwareKeyboardEnabled:(BOOL)enabled
+                      keyboardType:(uint8_t)keyboardType
+                             error:(NSError **)error;
 @end
 
 @protocol SPServiceContext <NSObject>
@@ -263,6 +270,21 @@ static NSError *SPMakeError(SPError code, NSString *message) {
     // above. Xcode 27.2 drops the messages IndigoHIDMessageForKeyboardArbitrary builds without
     // an error.
     [self usagePage:HIDPageKeyboard usage:usage down:down];
+}
+
+- (BOOL)setSoftwareKeyboardShown:(BOOL)shown error:(NSError **)error {
+    id<SPHardwareKeyboard> device = self.device;
+    SEL selector = @selector(setHardwareKeyboardEnabled:keyboardType:error:);
+    if (![device respondsToSelector:selector]) {
+        if (error) *error = SPMakeError(SPErrorHIDUnavailable, @"Hardware keyboard setting missing");
+        return NO;
+    }
+    // A simulated hardware keyboard takes the Mac keyboard's type, as DeviceHub gives it, so the
+    // device lays keys out as the Mac does.
+    IndigoKeyboardTypeFn keyboardType =
+        (IndigoKeyboardTypeFn)dlsym(self.simulatorKit, "IndigoHIDGetKeyboardType");
+    uint8_t type = !shown && keyboardType ? keyboardType() : 0;
+    return [device setHardwareKeyboardEnabled:!shown keyboardType:type error:error];
 }
 
 - (void)send:(nullable void *)message {
