@@ -1,6 +1,8 @@
 [versions]
 kotlin = "2.4.20"
 intellij-platform = "2.19.0"
+# Only for markdownToHTML, which turns description.md into the plugin.xml description.
+changelog = "2.5.0"
 junit = "5.13.4"
 # The kotlinx.serialization that Android Studio 2025.1, the oldest the plugin supports, bundles.
 kotlinx-serialization = "1.7.3"
@@ -16,3 +18,4 @@ kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test-junit5", version.ref 
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 intellij-platform = { id = "org.jetbrains.intellij.platform", version.ref = "intellij-platform" }
+changelog = { id = "org.jetbrains.changelog", version.ref = "changelog" }

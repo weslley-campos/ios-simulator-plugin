@@ -1,3 +1,4 @@
+import org.jetbrains.changelog.markdownToHTML
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
@@ -9,6 +10,8 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.intellij.platform)
+    // Not applied: only its markdownToHTML is used, for the plugin description below.
+    alias(libs.plugins.changelog) apply false
 }
 
 group = "br.com.weslleycampos.simpanel"
@@ -64,6 +67,10 @@ dependencies {
 intellijPlatform {
     buildSearchableOptions = false
     pluginConfiguration {
+        // The Marketplace page and the IDE's plugin details show this. Each upload replaces the
+        // Marketplace text, so edit description.md rather than the website.
+        description = providers.fileContents(layout.projectDirectory.file("description.md"))
+            .asText.map { markdownToHTML(it) }
         ideaVersion {
             sinceBuild = "251"
             untilBuild = provider { null }

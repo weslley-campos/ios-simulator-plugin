@@ -2,10 +2,7 @@
     <id>br.com.weslleycampos.simpanel</id>
     <name>iOS Simulator</name>
     <vendor>Weslley Campos</vendor>
-    <description><![CDATA[
-        Shows a booted iOS simulator in a tool window, live and interactive, the way Running
-        Devices shows the Android emulator. Click to tap and drag to swipe.
-    ]]></description>
+    <!-- The description comes from plugin/description.md at build time. -->
 
     <depends>com.intellij.modules.platform</depends>
 
