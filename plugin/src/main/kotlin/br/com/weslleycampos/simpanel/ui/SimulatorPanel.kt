@@ -11,6 +11,7 @@ import br.com.weslleycampos.simpanel.keyboard.Keystroke
 import br.com.weslleycampos.simpanel.protocol.DeviceButton
 import br.com.weslleycampos.simpanel.protocol.HelperMessage
 import br.com.weslleycampos.simpanel.protocol.PluginMessage
+import br.com.weslleycampos.simpanel.runs.DeviceHubHider
 import br.com.weslleycampos.simpanel.settings.StreamSettings
 import br.com.weslleycampos.simpanel.simulators.BootWatch
 import br.com.weslleycampos.simpanel.simulators.DeviceHub
@@ -22,8 +23,8 @@ import br.com.weslleycampos.simpanel.simulators.Simulator
 import br.com.weslleycampos.simpanel.simulators.pickSimulator
 import br.com.weslleycampos.simpanel.simulators.screenshotFile
 import br.com.weslleycampos.simpanel.ui.actions.ControlAction
-import br.com.weslleycampos.simpanel.ui.actions.FrameRateToggleAction
 import br.com.weslleycampos.simpanel.ui.actions.FrameToggleAction
+import br.com.weslleycampos.simpanel.ui.actions.SettingsAction
 import br.com.weslleycampos.simpanel.ui.actions.SimulatorControls
 import com.intellij.icons.AllIcons
 import com.intellij.ide.IdeEventQueue
@@ -34,7 +35,6 @@ import com.intellij.openapi.actionSystem.ActionToolbar
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.Separator
-import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.actionSystem.toolbarLayout.ToolbarLayoutStrategy
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.ModalityState
@@ -139,10 +139,7 @@ class SimulatorPanel(private val project: Project) :
             }
         }
         val shutDown = ControlAction(message("action.shutDown"), AllIcons.Actions.Suspend, this) { shutDown() }
-        val settings = DefaultActionGroup(message("action.settings"), listOf(FrameRateToggleAction(this)))
-        settings.isPopup = true
-        settings.templatePresentation.icon = AllIcons.General.GearPlain
-        settings.templatePresentation.putClientProperty(ActionUtil.HIDE_DROPDOWN_ICON, true)
+        val settings = SettingsAction(this)
         val actions = ActionManager.getInstance()
             .createActionToolbar(ToolbarPlace, DefaultActionGroup(refresh, shutDown, settings), true)
         actions.targetComponent = this
@@ -177,6 +174,7 @@ class SimulatorPanel(private val project: Project) :
             for (step in typing) step()
         }
         scope.launch { watchForBoot() }
+        scope.launch { service.runs.collect { follow(it) } }
         StreamSettings.watch(this) { session?.send(it) }
         screen.frameVisible = PropertiesComponent.getInstance().getBoolean(FrameVisibleKey, true)
         screen.showFps = PropertiesComponent.getInstance().getBoolean(FrameRateVisibleKey, false)
@@ -341,6 +339,24 @@ class SimulatorPanel(private val project: Project) :
         }
     }
 
+    /** Shows the simulator [udid] a run starts on, or waits for the run to boot it. */
+    private suspend fun follow(udid: String) {
+        val simulators = try {
+            withContext(Dispatchers.IO) { Simctl.list() }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.warn(e)
+            return
+        }
+        val simulator = simulators.find { it.udid == udid } ?: return
+        list(simulators, simulator)
+        if (simulator.booted) {
+            open(simulator, boot = false)
+        } else {
+            awaitBoot(simulator, message("status.runBooting", simulator.name))
+        }
+    }
+
     /** Lists [simulators] and shows the one [pickSimulator] picks, or waits for it to boot. */
     private fun show(simulators: List<Simulator>) {
         val keep = (devices.selectedItem as? Simulator)?.udid
@@ -485,6 +501,7 @@ class SimulatorPanel(private val project: Project) :
     }
 
     private fun openDeviceHub() {
+        project.service<DeviceHubHider>().stopAll()
         scope.launch {
             try {
                 withContext(Dispatchers.IO) { DeviceHub.open() }

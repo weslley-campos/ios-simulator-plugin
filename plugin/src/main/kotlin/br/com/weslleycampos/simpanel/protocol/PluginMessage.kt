@@ -2,6 +2,7 @@ package br.com.weslleycampos.simpanel.protocol
 
 import br.com.weslleycampos.simpanel.SimPanelJson
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 
 /** What the plugin sends the helper. */
 sealed interface PluginMessage {

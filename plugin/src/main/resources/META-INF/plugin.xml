@@ -1,6 +1,6 @@
 <idea-plugin>
     <id>br.com.weslleycampos.simpanel</id>
-    <name>iOS Simulator Panel</name>
+    <name>iOS Simulator</name>
     <vendor>Weslley Campos</vendor>
     <description><![CDATA[
         Shows a booted iOS simulator in a tool window, live and interactive, the way Running
@@ -20,5 +20,12 @@
                          enumClass="br.com.weslleycampos.simpanel.shutdown.ShutDownChoice"/>
         <advancedSetting id="simpanel.maxFps" default="60" groupKey="advanced.settings.group"/>
         <advancedSetting id="simpanel.jpegQuality" default="70" groupKey="advanced.settings.group"/>
+        <advancedSetting id="simpanel.deviceHubOnRun" default="Hide" groupKey="advanced.settings.group"
+                         enumClass="br.com.weslleycampos.simpanel.runs.DeviceHubOnRun"/>
     </extensions>
+
+    <projectListeners>
+        <listener class="br.com.weslleycampos.simpanel.runs.SimulatorRunListener"
+                  topic="com.intellij.execution.ExecutionListener"/>
+    </projectListeners>
 </idea-plugin>

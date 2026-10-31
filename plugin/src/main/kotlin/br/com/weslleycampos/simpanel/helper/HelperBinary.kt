@@ -1,17 +1,15 @@
 package br.com.weslleycampos.simpanel.helper
 
-import com.intellij.ide.plugins.PluginManagerCore
-import com.intellij.openapi.extensions.PluginId
+import com.intellij.ide.plugins.cl.PluginAwareClassLoader
 import java.nio.file.Files
 import java.nio.file.Path
-
-private const val SimPanelPluginId = "br.com.weslleycampos.simpanel"
 
 object HelperBinary {
     /** The helper in the plugin's bin directory, made executable again if unpacking dropped the bit. */
     fun path(): Path {
-        val plugin = checkNotNull(PluginManagerCore.getPlugin(PluginId.getId(SimPanelPluginId))) {
-            "The $SimPanelPluginId plugin isn't loaded"
+        // The plugin's own class loader names it the same way in every IDE version.
+        val plugin = checkNotNull((HelperBinary::class.java.classLoader as? PluginAwareClassLoader)?.pluginDescriptor) {
+            "The plugin's classes weren't loaded by the IDE"
         }
         return executable(plugin.pluginPath.resolve("bin/simpanel-helper"))
     }

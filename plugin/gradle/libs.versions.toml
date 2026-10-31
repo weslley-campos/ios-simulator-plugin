@@ -2,8 +2,11 @@
 kotlin = "2.4.20"
 intellij-platform = "2.19.0"
 junit = "5.13.4"
+# The kotlinx.serialization that Android Studio 2025.1, the oldest the plugin supports, bundles.
+kotlinx-serialization = "1.7.3"
 
 [libraries]
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 junit-launcher = { module = "org.junit.platform:junit-platform-launcher" }

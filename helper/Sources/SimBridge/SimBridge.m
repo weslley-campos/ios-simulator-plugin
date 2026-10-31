@@ -248,7 +248,11 @@ static NSError *SPMakeError(SPError code, NSString *message) {
     if (button == SPButtonLock) source = IndigoButtonLock;
     if (button == SPButtonSiri) source = IndigoButtonSiri;
     uint32_t direction = down ? IndigoDirectionDown : IndigoDirectionUp;
-    [self send:self.buttonMessage(source, direction, IndigoTargetButton)];
+    // Home and Lock work through the digitizer target on iOS 26 and 27; iOS 26 ignores them on
+    // the button target. Siri keeps the button target: on either target it restarts SpringBoard
+    // on both runtimes, which then recovers.
+    uint32_t target = button == SPButtonSiri ? IndigoTargetButton : IndigoTargetDigitizer;
+    [self send:self.buttonMessage(source, direction, target)];
 }
 
 - (void)usagePage:(uint32_t)page usage:(uint32_t)usage down:(BOOL)down {

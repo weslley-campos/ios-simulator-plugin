@@ -1,0 +1,83 @@
+name: Build
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Never cancel a release halfway through publishing.
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # Apple silicon, macOS 27 and Xcode 27.1, the image's default Xcode. GitHub lists this image
+    # as a preview; move to macos-27 once that label exists.
+    runs-on: xcode-27
+    timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+    defaults:
+      run:
+        working-directory: plugin
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+
+      # Caches Gradle's downloads, Android Studio 2026.2.2 among them. The androidStudioPath in
+      # gradle.properties doesn't exist on the runner, so the build downloads androidStudioVersion.
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Show the toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+          java -version
+
+      - name: Test the helper
+        working-directory: helper
+        run: swift test
+
+      - name: Test the plugin
+        run: ./gradlew test
+
+      - name: Build the plugin
+        run: ./gradlew buildPlugin
+
+      # Checks the plugin's API use against each verifyAndroidStudioVersions release in gradle.properties.
+      - name: Verify against older Android Studio releases
+        run: ./gradlew verifyPlugin
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: simpanel-plugin
+          path: plugin/build/distributions/*.zip
+          if-no-files-found: error
+
+      - name: Check the tag matches the plugin version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' build.gradle.kts)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match version $version in plugin/build.gradle.kts"
+            exit 1
+          fi
+
+      - name: Sign and publish to JetBrains Marketplace
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+          CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
+        run: ./gradlew signPlugin publishPlugin
