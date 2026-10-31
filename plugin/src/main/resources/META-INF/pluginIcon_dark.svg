@@ -1,0 +1,13 @@
+<!-- The plugin's icon: a phone running iOS, drawn from the tool window icon. -->
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="body" x1="10" y1="3" x2="30" y2="37" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5EA1FF"/>
+      <stop offset="1" stop-color="#9B7BFF"/>
+    </linearGradient>
+  </defs>
+  <rect x="9" y="2" width="22" height="36" rx="5.5" fill="url(#body)"/>
+  <rect x="11.5" y="4.5" width="17" height="31" rx="3.5" fill="#1E1F22"/>
+  <rect x="17" y="6.5" width="6" height="2" rx="1" fill="url(#body)"/>
+  <path transform="translate(14.2 2.6) scale(1.6)" d="M3.53 10.81c-.25 0-1-.81-1.71-.81C.94 10 0 10.99 0 12.48 0 13.79 1.02 16 2.03 16c.68 0 1.06-.91 1.63-.91s.83.9 1.52.9c.76 0 1.66-1.5 1.82-2.13-.36-.11-.68-.32-.92-.61-.24-.28-.4-.63-.45-1 0-.68.51-1.15 1.15-1.55-.18-.22-.4-.4-.66-.52S5.58 10 5.3 10c-.68 0-1.51.81-1.76.81Zm-.14-3.08c.42-.45 1-.7 1.61-.73.03.26 0 .53-.08.78-.09.25-.23.48-.42.66s-.42.33-.68.43c-.25.1-.52.14-.79.13-.04-.23-.03-.46.03-.68s.17-.43.33-.59" fill="url(#body)"/>
+</svg>
